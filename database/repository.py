@@ -368,6 +368,8 @@ class Repository:
         finally:
             session.close()
 
+    get_pending_cleanup_suggestions = get_pending_suggestions
+
     def update_suggestion_status(self, suggestion_id: int, status: str) -> None:
         session = self.get_session()
         try:

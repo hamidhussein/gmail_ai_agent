@@ -100,7 +100,7 @@ class ReviewScreenView(ft.Container):
     def load_suggestions(self) -> None:
         """Loads pending suggestions from repository."""
         self.suggestions_column.controls.clear()
-        self.suggestion_items = repository.get_pending_cleanup_suggestions()
+        self.suggestion_items = repository.get_pending_suggestions()
         self.selected_suggestion_ids = {s.id for s, _ in self.suggestion_items}
 
         total = len(self.suggestion_items)
@@ -134,7 +134,7 @@ class ReviewScreenView(ft.Container):
         cat = email.category or "PROMOTION"
         cat_color = get_category_color(cat)
         confidence = int((sugg.confidence or 0.85) * 100)
-        action_name = sugg.suggested_action.value if hasattr(sugg.suggested_action, "value") else str(sugg.suggested_action)
+        action_str = sugg.action_type or "ARCHIVE"
 
         chk = ft.Checkbox(
             value=sugg.id in self.selected_suggestion_ids,
@@ -155,18 +155,18 @@ class ReviewScreenView(ft.Container):
                     ft.Text(email.subject or "(No Subject)", size=12, color=COLORS["text_secondary"], no_wrap=True),
                 ], expand=True, spacing=2),
                 ft.Column([
-                    ft.Text(f"Action: {action_name}", size=12, weight=ft.FontWeight.BOLD, color=COLORS["warning"]),
+                    ft.Text(f"Action: {action_str}", size=12, weight=ft.FontWeight.BOLD, color=COLORS["warning"]),
                     ft.Text(f"Confidence: {confidence}%", size=11, color=COLORS["text_muted"]),
                 ], spacing=2),
                 ft.Row([
                     ft.IconButton(
-                        ft.Icons.CHECK,
+                        icon=ft.Icons.CHECK,
                         icon_color=COLORS["success"],
                         tooltip="Approve & Execute",
                         on_click=lambda e, s=sugg, em=email: self._approve_single(s, em),
                     ),
                     ft.IconButton(
-                        ft.Icons.CLOSE,
+                        icon=ft.Icons.CLOSE,
                         icon_color=COLORS["danger"],
                         tooltip="Dismiss",
                         on_click=lambda e, s=sugg: self._dismiss_single(s),
@@ -197,13 +197,13 @@ class ReviewScreenView(ft.Container):
 
     def _approve_single(self, sugg: CleanupSuggestion, email: EmailRecord):
         try:
-            if sugg.suggested_action in (ActionType.MOVE_TRASH, ActionType.UNSUBSCRIBE_AND_TRASH):
+            if sugg.action_type in (ActionType.MOVE_TRASH.value, ActionType.UNSUBSCRIBE_AND_TRASH.value, "MOVE_TRASH", "UNSUBSCRIBE_AND_TRASH"):
                 gmail_actions.trash_message(email.message_id)
             else:
                 gmail_actions.archive_message(email.message_id)
 
-            repository.update_suggestion_status(sugg.id, SuggestionStatus.APPROVED, user_approved=True)
-            learning_engine.on_user_approved_action(email.sender, sugg.suggested_action.value)
+            repository.update_suggestion_status(sugg.id, SuggestionStatus.EXECUTED.value)
+            learning_engine.on_user_approved_action(email.sender, sugg.action_type)
             if self.page:
                 self.page.open(ft.SnackBar(ft.Text(f"Cleaned: {email.subject[:30]}..."), bgcolor=COLORS["success"]))
             self.load_suggestions()
@@ -212,7 +212,7 @@ class ReviewScreenView(ft.Container):
                 self.page.open(ft.SnackBar(ft.Text(f"Error: {ex}"), bgcolor=COLORS["danger"]))
 
     def _dismiss_single(self, sugg: CleanupSuggestion):
-        repository.update_suggestion_status(sugg.id, SuggestionStatus.REJECTED, user_approved=False)
+        repository.update_suggestion_status(sugg.id, SuggestionStatus.REJECTED.value)
         if self.page:
             self.page.open(ft.SnackBar(ft.Text("Suggestion dismissed"), bgcolor=COLORS["text_secondary"]))
         self.load_suggestions()
@@ -225,11 +225,11 @@ class ReviewScreenView(ft.Container):
         for sugg, email in self.suggestion_items:
             if sugg.id in self.selected_suggestion_ids:
                 try:
-                    if sugg.suggested_action in (ActionType.MOVE_TRASH, ActionType.UNSUBSCRIBE_AND_TRASH):
+                    if sugg.action_type in (ActionType.MOVE_TRASH.value, ActionType.UNSUBSCRIBE_AND_TRASH.value, "MOVE_TRASH", "UNSUBSCRIBE_AND_TRASH"):
                         gmail_actions.trash_message(email.message_id)
                     else:
                         gmail_actions.archive_message(email.message_id)
-                    repository.update_suggestion_status(sugg.id, SuggestionStatus.APPROVED, user_approved=True)
+                    repository.update_suggestion_status(sugg.id, SuggestionStatus.EXECUTED.value)
                     approved_count += 1
                 except Exception:
                     pass
@@ -240,7 +240,7 @@ class ReviewScreenView(ft.Container):
 
     def _bulk_dismiss(self):
         for sid in self.selected_suggestion_ids:
-            repository.update_suggestion_status(sid, SuggestionStatus.REJECTED, user_approved=False)
+            repository.update_suggestion_status(sid, SuggestionStatus.REJECTED.value)
         if self.page:
             self.page.open(ft.SnackBar(ft.Text("Dismissed selected suggestions"), bgcolor=COLORS["text_secondary"]))
         self.load_suggestions()
