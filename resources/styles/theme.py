@@ -70,9 +70,29 @@ def get_category_color(category_str: str) -> str:
         return "#64748B"
 
 
+def border_all(width: float = 1, color: str = None) -> ft.Border:
+    """Returns a full border around all sides."""
+    return ft.Border.all(width, color or COLORS["border"])
+
+
+def border_only(**kwargs) -> ft.Border:
+    """Returns a selective border (e.g. right=ft.BorderSide(1, color))."""
+    return ft.Border.only(**kwargs)
+
+
+def padding_all(value: float) -> ft.Padding:
+    """Returns uniform padding for all 4 sides."""
+    return ft.Padding(value, value, value, value)
+
+
+def padding_symmetric(horizontal: float = 0, vertical: float = 0) -> ft.Padding:
+    """Returns symmetric horizontal and vertical padding."""
+    return ft.Padding(horizontal, vertical, horizontal, vertical)
+
+
 def glass_container(
     content: ft.Control,
-    padding: int = 16,
+    padding = 16,
     border_color: str = None,
     bg_color: str = None,
     border_radius: int = 12,
@@ -85,7 +105,7 @@ def glass_container(
         padding=padding,
         border_radius=border_radius,
         bgcolor=bg_color or COLORS["bg_card"],
-        border=ft.border.all(1, border_color or COLORS["border"]),
+        border=border_all(1, border_color or COLORS["border"]),
         expand=expand,
         on_click=on_click,
         animate=ft.animation.Animation(200, ft.AnimationCurve.EASE_OUT) if on_click else None,

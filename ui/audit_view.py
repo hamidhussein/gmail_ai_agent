@@ -2,7 +2,12 @@
 GmailAI Assistant - Action Audit Logs Viewer for Flet
 """
 import flet as ft
-from resources.styles.theme import COLORS, glass_container
+from resources.styles.theme import (
+    COLORS,
+    border_all,
+    padding_all,
+    padding_symmetric,
+)
 from database.repository import repository
 
 
@@ -46,7 +51,7 @@ class AuditLogsView(ft.Container):
                         ft.Text("REASON", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_muted"], width=180),
                     ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
                     bgcolor=COLORS["bg_card_hover"],
-                    padding=ft.padding.symmetric(horizontal=16, vertical=8),
+                    padding=padding_symmetric(horizontal=16, vertical=8),
                     border_radius=8,
                 ),
 
@@ -61,7 +66,7 @@ class AuditLogsView(ft.Container):
         super().__init__(
             content=content,
             expand=True,
-            padding=ft.padding.all(24),
+            padding=padding_all(24),
             **kwargs,
         )
 
@@ -98,7 +103,7 @@ class AuditLogsView(ft.Container):
                     ft.Container(
                         content=ft.Text(entry.action_type or "ACTION", size=10, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
                         bgcolor=act_col,
-                        padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                        padding=padding_symmetric(horizontal=6, vertical=2),
                         border_radius=4,
                         width=110,
                         alignment=ft.alignment.center,
@@ -109,9 +114,9 @@ class AuditLogsView(ft.Container):
                     ft.Text(entry.reason or "Rule execution", size=11, color=COLORS["text_muted"], width=180, no_wrap=True),
                 ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
                 bgcolor=COLORS["bg_card"],
-                border=ft.border.all(1, COLORS["border"]),
+                border=border_all(1, COLORS["border"]),
                 border_radius=8,
-                padding=ft.padding.symmetric(horizontal=16, vertical=8),
+                padding=padding_symmetric(horizontal=16, vertical=8),
             )
             self.logs_column.controls.append(row)
 

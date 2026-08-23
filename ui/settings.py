@@ -2,17 +2,19 @@
 GmailAI Assistant - Settings & AI Router Configuration for Flet
 """
 import zipfile
-import shutil
 import datetime
 import flet as ft
-from resources.styles.theme import COLORS, glass_container
+from resources.styles.theme import (
+    COLORS,
+    border_all,
+    padding_all,
+)
 from app.config import config_manager
 from authentication.credential_manager import credential_manager
 from authentication.oauth_manager import oauth_manager
 from database.repository import repository
 from database.migrations import seed_demo_data
 from ai.local_model import LocalOllamaClient
-from ai.cloud_model import CloudOpenAIClient
 from memory.user_profile import user_profile_manager
 
 
@@ -195,7 +197,7 @@ class SettingsView(ft.Container):
         super().__init__(
             content=content,
             expand=True,
-            padding=ft.padding.all(24),
+            padding=padding_all(24),
             **kwargs,
         )
 
@@ -222,7 +224,7 @@ class SettingsView(ft.Container):
                 ft.Column(controls, spacing=12),
             ], spacing=10),
             bgcolor=COLORS["bg_card"],
-            border=ft.border.all(1, COLORS["border"]),
+            border=border_all(1, COLORS["border"]),
             border_radius=12,
             padding=20,
         )

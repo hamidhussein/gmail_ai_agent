@@ -12,7 +12,13 @@ from core.events import event_bus, EVT_SYNC_COMPLETED, EVT_TOAST_MESSAGE
 from database.repository import repository
 from database.migrations import seed_demo_data
 from automation.scheduler import scheduler
-from resources.styles.theme import COLORS
+from resources.styles.theme import (
+    COLORS,
+    border_all,
+    border_only,
+    padding_all,
+    padding_symmetric,
+)
 
 from ui.dashboard import DashboardView
 from ui.inbox_view import InboxIntelligenceView
@@ -79,7 +85,7 @@ class GmailAIApp:
         self.cleanup_badge_container = ft.Container(
             content=self.cleanup_badge_text,
             bgcolor=COLORS["danger"],
-            padding=ft.padding.symmetric(horizontal=6, vertical=2),
+            padding=padding_symmetric(horizontal=6, vertical=2),
             border_radius=10,
             visible=False,
         )
@@ -100,9 +106,9 @@ class GmailAIApp:
                 self.online_dot,
                 self.user_email_text,
             ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            padding=ft.padding.symmetric(horizontal=16, vertical=12),
+            padding=padding_symmetric(horizontal=16, vertical=12),
             bgcolor=COLORS["bg_card"],
-            border=ft.border.all(1, COLORS["border"]),
+            border=border_all(1, COLORS["border"]),
             border_radius=10,
         )
 
@@ -110,8 +116,8 @@ class GmailAIApp:
         self.sidebar = ft.Container(
             width=240,
             bgcolor=COLORS["bg_sidebar"],
-            border=ft.border.only(right=ft.BorderSide(1, COLORS["border"])),
-            padding=ft.padding.symmetric(horizontal=14, vertical=20),
+            border=border_only(right=ft.BorderSide(1, COLORS["border"])),
+            padding=padding_symmetric(horizontal=14, vertical=20),
             content=ft.Column([
                 # Brand Logo Header
                 ft.Row([
@@ -125,7 +131,7 @@ class GmailAIApp:
                     ft.Container(
                         content=ft.Text("PRO", size=10, weight=ft.FontWeight.BOLD, color=COLORS["badge_text"]),
                         bgcolor=COLORS["badge_bg"],
-                        padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                        padding=padding_symmetric(horizontal=6, vertical=2),
                         border_radius=4,
                     ),
                 ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
@@ -163,7 +169,7 @@ class GmailAIApp:
 
         container = ft.Container(
             content=ft.Row(row_items, alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
-            padding=ft.padding.symmetric(horizontal=12, vertical=10),
+            padding=padding_symmetric(horizontal=12, vertical=10),
             border_radius=8,
             on_click=lambda e, k=key: self.show_view(k),
             animate=ft.animation.Animation(150, ft.AnimationCurve.EASE_OUT),

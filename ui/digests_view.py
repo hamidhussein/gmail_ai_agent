@@ -2,8 +2,12 @@
 GmailAI Assistant - Daily AI Briefings Viewer for Flet
 """
 import flet as ft
-from typing import List
-from resources.styles.theme import COLORS
+from resources.styles.theme import (
+    COLORS,
+    border_all,
+    padding_all,
+    padding_symmetric,
+)
 from database.repository import repository
 from database.models import DailyDigestRecord
 from automation.daily_digest import daily_digest_generator
@@ -54,7 +58,7 @@ class DailyDigestsView(ft.Container):
         super().__init__(
             content=content,
             expand=True,
-            padding=ft.padding.all(24),
+            padding=padding_all(24),
             **kwargs,
         )
 
@@ -123,16 +127,16 @@ class DailyDigestsView(ft.Container):
                 initially_expanded=False,
             ),
             bgcolor=COLORS["bg_card"],
-            border=ft.border.all(1, COLORS["border"]),
+            border=border_all(1, COLORS["border"]),
             border_radius=12,
-            padding=ft.padding.symmetric(horizontal=12, vertical=4),
+            padding=padding_symmetric(horizontal=12, vertical=4),
         )
 
     def _badge(self, text: str, color: str) -> ft.Container:
         return ft.Container(
             content=ft.Text(text, size=11, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
             bgcolor=color,
-            padding=ft.padding.symmetric(horizontal=8, vertical=4),
+            padding=padding_symmetric(horizontal=8, vertical=4),
             border_radius=6,
         )
 

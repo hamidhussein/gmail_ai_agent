@@ -4,7 +4,14 @@ GmailAI Assistant - Intelligence Inbox Viewer for Flet
 import json
 import flet as ft
 from typing import Dict, Any, List, Optional
-from resources.styles.theme import COLORS, get_category_color, glass_container
+from resources.styles.theme import (
+    COLORS,
+    get_category_color,
+    glass_container,
+    border_all,
+    padding_all,
+    padding_symmetric,
+)
 from ui.components.reply_modal import ReplyDialog
 from database.repository import repository
 from gmail.actions import gmail_actions
@@ -65,7 +72,7 @@ class InboxIntelligenceView(ft.Container):
                 ft.Text("Select an email to view AI analysis", size=15, color=COLORS["text_secondary"]),
             ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=12),
             bgcolor=COLORS["bg_card"],
-            border=ft.border.all(1, COLORS["border"]),
+            border=border_all(1, COLORS["border"]),
             border_radius=12,
             padding=24,
             expand=13,
@@ -100,7 +107,7 @@ class InboxIntelligenceView(ft.Container):
         super().__init__(
             content=content,
             expand=True,
-            padding=ft.padding.all(24),
+            padding=padding_all(24),
             **kwargs,
         )
 
@@ -210,7 +217,7 @@ class InboxIntelligenceView(ft.Container):
                     ft.Container(
                         content=ft.Text(cat[:8], size=10, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
                         bgcolor=cat_color,
-                        padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                        padding=padding_symmetric(horizontal=6, vertical=2),
                         border_radius=4,
                     ),
                     ft.Text(email_data.get("sender_name") or email_data.get("sender", "Unknown"), size=13, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"], expand=True, no_wrap=True),
@@ -220,7 +227,7 @@ class InboxIntelligenceView(ft.Container):
                 ft.Text(email_data.get("snippet") or "", size=11, color=COLORS["text_secondary"], max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
             ], spacing=6),
             bgcolor=COLORS["bg_card_hover"] if is_selected else COLORS["bg_card"],
-            border=ft.border.all(1, COLORS["primary"] if is_selected else COLORS["border"]),
+            border=border_all(1, COLORS["primary"] if is_selected else COLORS["border"]),
             border_radius=10,
             padding=12,
             on_click=lambda e, d=email_data: self._select_email(d),
@@ -271,7 +278,7 @@ class InboxIntelligenceView(ft.Container):
                     ft.Container(
                         content=ft.Text(f" {cat} ", size=11, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
                         bgcolor=cat_color,
-                        padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                        padding=padding_symmetric(horizontal=8, vertical=4),
                         border_radius=4,
                     ),
                     ft.Text(f"From: {data.get('sender_name') or data.get('sender', '')}", size=13, color=COLORS["text_secondary"], expand=True, no_wrap=True),
@@ -302,7 +309,7 @@ class InboxIntelligenceView(ft.Container):
                         ], visible=len(action_items) > 0, spacing=4),
                     ], spacing=8),
                     bgcolor=COLORS["bg_main"],
-                    border=ft.border.all(1, COLORS["border"]),
+                    border=border_all(1, COLORS["border"]),
                     border_radius=10,
                     padding=14,
                 ),

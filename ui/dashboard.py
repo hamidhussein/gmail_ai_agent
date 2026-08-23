@@ -3,7 +3,14 @@ GmailAI Assistant - Executive Dashboard View for Flet
 """
 import flet as ft
 from typing import Callable
-from resources.styles.theme import COLORS, get_category_color, glass_container
+from resources.styles.theme import (
+    COLORS,
+    get_category_color,
+    glass_container,
+    border_all,
+    padding_all,
+    padding_symmetric,
+)
 from ui.components.stat_card import StatCard
 from database.repository import repository
 from app.config import config_manager
@@ -28,9 +35,9 @@ class DashboardView(ft.Container):
                 self.ai_badge_text,
             ], spacing=6, tight=True),
             bgcolor=COLORS["badge_bg"],
-            padding=ft.padding.symmetric(horizontal=12, vertical=6),
+            padding=padding_symmetric(horizontal=12, vertical=6),
             border_radius=8,
-            border=ft.border.all(1, "#312E81"),
+            border=border_all(1, "#312E81"),
         )
 
         self.sync_spinner = ft.ProgressRing(width=16, height=16, stroke_width=2, color=COLORS["text_primary"], visible=False)
@@ -128,7 +135,7 @@ class DashboardView(ft.Container):
                             self.briefing_markdown,
                         ], spacing=12),
                         bgcolor=COLORS["bg_card"],
-                        border=ft.border.all(1, COLORS["border"]),
+                        border=border_all(1, COLORS["border"]),
                         border_radius=12,
                         padding=20,
                         expand=3,
@@ -148,7 +155,7 @@ class DashboardView(ft.Container):
                             ft.OutlinedButton("Configure AI & Safety", icon=ft.Icons.SETTINGS, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)), on_click=lambda e: self.on_navigate("settings")),
                         ], spacing=10),
                         bgcolor=COLORS["bg_card"],
-                        border=ft.border.all(1, COLORS["border"]),
+                        border=border_all(1, COLORS["border"]),
                         border_radius=12,
                         padding=20,
                         expand=2,
@@ -166,7 +173,7 @@ class DashboardView(ft.Container):
                         self.activity_column,
                     ], spacing=12),
                     bgcolor=COLORS["bg_card"],
-                    border=ft.border.all(1, COLORS["border"]),
+                    border=border_all(1, COLORS["border"]),
                     border_radius=12,
                     padding=20,
                 ),
@@ -176,7 +183,7 @@ class DashboardView(ft.Container):
         super().__init__(
             content=content,
             expand=True,
-            padding=ft.padding.all(24),
+            padding=padding_all(24),
             **kwargs,
         )
 
@@ -245,16 +252,16 @@ class DashboardView(ft.Container):
             row = ft.Container(
                 content=ft.Row([
                     ft.Container(
-                        content=ft.Text(cat[:8], size=11, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
+                        content=ft.Text(cat[:8], size=10, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
                         bgcolor=cat_color,
-                        padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                        padding=padding_symmetric(horizontal=8, vertical=4),
                         border_radius=4,
                     ),
                     ft.Text(email.sender_name or email.sender or "Unknown", size=13, weight=ft.FontWeight.W_600, color=COLORS["text_primary"], width=180, no_wrap=True),
                     ft.Text(email.subject or "(No Subject)", size=13, color=COLORS["text_secondary"], expand=True, no_wrap=True),
                     ft.Text(email.ai_source or "HEURISTIC", size=11, color=source_color, weight=ft.FontWeight.W_500),
                 ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=12),
-                padding=ft.padding.symmetric(vertical=4),
+                padding=padding_symmetric(vertical=4),
             )
             self.activity_column.controls.append(row)
 

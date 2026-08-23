@@ -3,7 +3,7 @@ GmailAI Assistant - Metric Stat Card Component for Flet
 """
 import flet as ft
 from typing import Optional
-from resources.styles.theme import COLORS
+from resources.styles.theme import COLORS, border_all
 
 
 class StatCard(ft.Container):
@@ -62,7 +62,7 @@ class StatCard(ft.Container):
         super().__init__(
             content=content,
             bgcolor=COLORS["bg_card"],
-            border=ft.border.all(1, COLORS["border"]),
+            border=border_all(1, COLORS["border"]),
             border_radius=12,
             padding=16,
             expand=expand,
@@ -72,7 +72,7 @@ class StatCard(ft.Container):
         )
 
     def _on_hover(self, e):
-        self.border = ft.border.all(1, self.accent_color if e.data == "true" else COLORS["border"])
+        self.border = border_all(1, self.accent_color if e.data == "true" else COLORS["border"])
         self.bgcolor = COLORS["bg_card_hover"] if e.data == "true" else COLORS["bg_card"]
         self.update()
 

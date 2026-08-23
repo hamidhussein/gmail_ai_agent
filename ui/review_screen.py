@@ -3,7 +3,13 @@ GmailAI Assistant - Smart Cleanup Review Screen for Flet
 """
 import flet as ft
 from typing import List, Tuple
-from resources.styles.theme import COLORS, get_category_color
+from resources.styles.theme import (
+    COLORS,
+    get_category_color,
+    border_all,
+    padding_all,
+    padding_symmetric,
+)
 from database.repository import repository
 from database.models import CleanupSuggestion, EmailRecord
 from gmail.actions import gmail_actions
@@ -71,9 +77,9 @@ class ReviewScreenView(ft.Container):
                         self.bulk_approve_btn,
                     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                     bgcolor=COLORS["bg_card"],
-                    border=ft.border.all(1, COLORS["border"]),
+                    border=border_all(1, COLORS["border"]),
                     border_radius=10,
-                    padding=ft.padding.symmetric(horizontal=16, vertical=10),
+                    padding=padding_symmetric(horizontal=16, vertical=10),
                 ),
 
                 # List Container
@@ -87,7 +93,7 @@ class ReviewScreenView(ft.Container):
         super().__init__(
             content=content,
             expand=True,
-            padding=ft.padding.all(24),
+            padding=padding_all(24),
             **kwargs,
         )
 
@@ -147,7 +153,7 @@ class ReviewScreenView(ft.Container):
                 ft.Container(
                     content=ft.Text(cat[:8], size=10, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
                     bgcolor=cat_color,
-                    padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                    padding=padding_symmetric(horizontal=8, vertical=4),
                     border_radius=4,
                 ),
                 ft.Column([
@@ -174,9 +180,9 @@ class ReviewScreenView(ft.Container):
                 ], spacing=4),
             ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=12),
             bgcolor=COLORS["bg_card"],
-            border=ft.border.all(1, COLORS["border"]),
+            border=border_all(1, COLORS["border"]),
             border_radius=10,
-            padding=ft.padding.symmetric(horizontal=14, vertical=10),
+            padding=padding_symmetric(horizontal=14, vertical=10),
         )
 
     def _on_item_toggle(self, sid: int, is_checked: bool):
