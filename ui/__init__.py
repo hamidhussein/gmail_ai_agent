@@ -1,0 +1,3 @@
+"""
+GmailAI Assistant - UI Package
+"""

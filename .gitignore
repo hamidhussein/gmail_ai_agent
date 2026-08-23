@@ -1,0 +1,36 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Local databases & logs
+*.db
+*.sqlite
+*.log
+logs/
+tokens/
+backups/
+credentials.json
+user_profile.json
+config.json
+
+# PyInstaller / Build
+build/
+dist/
+*.spec.bak
+*.exe
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
