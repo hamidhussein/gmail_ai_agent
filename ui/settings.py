@@ -12,6 +12,7 @@ from resources.styles.theme import (
     set_theme_mode,
 )
 from app.config import config_manager
+from core.events import event_bus, EVT_THEME_CHANGED
 from authentication.credential_manager import credential_manager
 from authentication.oauth_manager import oauth_manager
 from database.repository import repository
@@ -269,6 +270,7 @@ class SettingsView(ft.Container):
         config_manager.config.ui_theme = new_theme
         config_manager.save()
         set_theme_mode(new_theme)
+        event_bus.publish(EVT_THEME_CHANGED, new_theme)
         if self.page_ref:
             self.page_ref.theme_mode = ft.ThemeMode.LIGHT if new_theme == "light" else ft.ThemeMode.DARK
             self.page_ref.bgcolor = COLORS["bg_main"]

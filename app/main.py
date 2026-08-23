@@ -8,7 +8,7 @@ from typing import Dict, Any
 
 from app.config import config_manager
 from core.logger import setup_logger
-from core.events import event_bus, EVT_SYNC_COMPLETED, EVT_TOAST_MESSAGE
+from core.events import event_bus, EVT_SYNC_COMPLETED, EVT_TOAST_MESSAGE, EVT_THEME_CHANGED
 from database.repository import repository
 from database.migrations import seed_demo_data
 from automation.scheduler import scheduler
@@ -297,6 +297,21 @@ class GmailAIApp:
     def _register_events(self) -> None:
         event_bus.subscribe(EVT_SYNC_COMPLETED, lambda data: self._on_sync_event(data))
         event_bus.subscribe(EVT_TOAST_MESSAGE, lambda msg: self._show_toast(str(msg)))
+        event_bus.subscribe(EVT_THEME_CHANGED, lambda theme: self._on_theme_event(theme))
+
+    def _on_theme_event(self, new_theme: str) -> None:
+        is_light = (new_theme == "light")
+        self.page.theme_mode = ft.ThemeMode.LIGHT if is_light else ft.ThemeMode.DARK
+        self.page.bgcolor = COLORS["bg_main"]
+
+        self.theme_icon.name = ft.Icons.DARK_MODE_OUTLINED if is_light else ft.Icons.LIGHT_MODE_OUTLINED
+        self.theme_label.value = "Switch to Dark" if is_light else "Switch to Light"
+
+        self.sidebar.bgcolor = COLORS["bg_sidebar"]
+        self.sidebar.border = border_only(right=ft.BorderSide(1, COLORS["border"]))
+
+        self.views.clear()
+        self.show_view(self.current_tab)
 
     def _on_sync_event(self, data) -> None:
         self.views.pop("dashboard", None)
