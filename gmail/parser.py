@@ -171,6 +171,9 @@ class EmailParser:
 
         # Parse body and attachments
         body_plain, body_html, attachments = cls.extract_body_and_attachments(payload)
+        body_plain = html.unescape(body_plain) if body_plain else ""
+        subject = html.unescape(subject)
+        snippet = html.unescape(snippet)
 
         # State flags from Gmail labels
         is_unread = "UNREAD" in label_ids
