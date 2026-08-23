@@ -2,8 +2,8 @@
 GmailAI Assistant - Smart Cleanup Review Screen for Flet
 """
 import flet as ft
-from typing import Dict, List, Tuple
-from resources.styles.theme import COLORS, get_category_color, glass_container
+from typing import List, Tuple
+from resources.styles.theme import COLORS, get_category_color
 from database.repository import repository
 from database.models import CleanupSuggestion, EmailRecord
 from gmail.actions import gmail_actions
