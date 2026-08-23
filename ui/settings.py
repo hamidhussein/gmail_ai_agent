@@ -1,13 +1,11 @@
 """
-GmailAI Assistant - Settings & AI Router Configuration
+GmailAI Assistant - Settings & AI Router Configuration for Flet
 """
 import zipfile
 import shutil
 import datetime
-import customtkinter as ctk
-from tkinter import filedialog
-from typing import Callable, Optional
-from resources.styles.theme import FONTS, THEME
+import flet as ft
+from resources.styles.theme import COLORS, glass_container
 from app.config import config_manager
 from authentication.credential_manager import credential_manager
 from authentication.oauth_manager import oauth_manager
@@ -16,354 +14,292 @@ from database.migrations import seed_demo_data
 from ai.local_model import LocalOllamaClient
 from ai.cloud_model import CloudOpenAIClient
 from memory.user_profile import user_profile_manager
-from core.security import safety_guard
-from ui.components.toast import ToastNotification
 
 
-class SettingsView(ctk.CTkFrame):
-    """Configuration control panel for AI models, Gmail OAuth, safety rules, and backups."""
+class SettingsView(ft.Container):
+    """Full control panel for AI models, Gmail OAuth, safety thresholds, and profile settings."""
 
-    def __init__(self, master, **kwargs):
-        super().__init__(master, fg_color="transparent", **kwargs)
-        self._build_ui()
+    def __init__(self, page: ft.Page, **kwargs):
+        self.page_ref = page
 
-    def _build_ui(self) -> None:
-        header = ctk.CTkFrame(self, fg_color="transparent")
-        header.pack(fill="x", padx=28, pady=(24, 16))
-
-        ctk.CTkLabel(
-            header,
-            text="⚙️ Settings & Intelligence Control",
-            font=FONTS["h1"],
-            text_color="#F8FAFC",
-        ).pack(anchor="w")
-
-        # Scrollable container for settings sections
-        self.scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self.scroll.pack(fill="both", expand=True, padx=28, pady=(0, 16))
-
-        self._build_ai_router_section()
-        self._build_oauth_section()
-        self._build_safety_section()
-        self._build_profile_section()
-        self._build_backup_section()
-
-    # --- Section 1: AI Router Configuration ---
-    def _build_ai_router_section(self) -> None:
-        card = self._create_card("🧠 Hybrid AI Router & Engine Configuration")
-
-        # AI Mode Selector
-        row_mode = ctk.CTkFrame(card, fg_color="transparent")
-        row_mode.pack(fill="x", padx=16, pady=8)
-
-        ctk.CTkLabel(row_mode, text="Active AI Mode:", font=FONTS["body_bold"], width=160, anchor="w").pack(side="left")
-        self.ai_mode_menu = ctk.CTkOptionMenu(
-            row_mode,
-            values=["HYBRID", "LOCAL_ONLY", "CLOUD_ONLY", "HEURISTIC"],
-            command=self._on_ai_mode_changed,
-            fg_color=THEME["dark"]["primary"],
+        # Section 1: AI Router Controls
+        self.ai_mode_dropdown = ft.Dropdown(
+            value=config_manager.config.ai_mode,
+            options=[
+                ft.dropdown.Option("HYBRID"),
+                ft.dropdown.Option("LOCAL_ONLY"),
+                ft.dropdown.Option("CLOUD_ONLY"),
+                ft.dropdown.Option("HEURISTIC"),
+            ],
+            width=200,
+            border_color=COLORS["border"],
+            bgcolor=COLORS["bg_card"],
+            focused_border_color=COLORS["primary"],
+            on_change=self._on_ai_mode_change,
         )
-        self.ai_mode_menu.set(config_manager.config.ai_mode)
-        self.ai_mode_menu.pack(side="left", padx=8)
 
-        # Local Ollama Settings
-        row_ollama = ctk.CTkFrame(card, fg_color="transparent")
-        row_ollama.pack(fill="x", padx=16, pady=8)
-
-        ctk.CTkLabel(row_ollama, text="Local Ollama URL:", font=FONTS["body"], width=160, anchor="w").pack(side="left")
-        self.ollama_url_entry = ctk.CTkEntry(row_ollama, width=220, fg_color="#0F172A")
-        self.ollama_url_entry.insert(0, config_manager.config.ollama_url)
-        self.ollama_url_entry.pack(side="left", padx=8)
-
-        self.ollama_model_entry = ctk.CTkEntry(row_ollama, width=140, fg_color="#0F172A")
-        self.ollama_model_entry.insert(0, config_manager.config.ollama_model)
-        self.ollama_model_entry.pack(side="left", padx=8)
-
-        test_ollama_btn = ctk.CTkButton(
-            row_ollama,
-            text="⚡ Test Local AI",
-            font=FONTS["body_sm_bold"],
-            width=110,
-            fg_color="#334155",
-            hover_color="#475569",
-            command=self._test_ollama,
+        self.ollama_url_field = ft.TextField(
+            value=config_manager.config.ollama_url,
+            label="Local Ollama Endpoint",
+            border_color=COLORS["border"],
+            bgcolor=COLORS["bg_card"],
+            focused_border_color=COLORS["primary"],
+            expand=True,
+            content_padding=10,
         )
-        test_ollama_btn.pack(side="left", padx=8)
 
-        # OpenAI Settings
-        row_openai = ctk.CTkFrame(card, fg_color="transparent")
-        row_openai.pack(fill="x", padx=16, pady=8)
-
-        ctk.CTkLabel(row_openai, text="OpenAI API Key:", font=FONTS["body"], width=160, anchor="w").pack(side="left")
-        self.openai_key_entry = ctk.CTkEntry(
-            row_openai,
-            width=220,
-            show="•",
-            placeholder_text="sk-...",
-            fg_color="#0F172A",
+        self.ollama_model_field = ft.TextField(
+            value=config_manager.config.ollama_model,
+            label="Ollama Model Name",
+            border_color=COLORS["border"],
+            bgcolor=COLORS["bg_card"],
+            focused_border_color=COLORS["primary"],
+            width=200,
+            content_padding=10,
         )
-        existing_key = config_manager.get_openai_api_key()
-        if existing_key:
-            self.openai_key_entry.insert(0, existing_key)
-        self.openai_key_entry.pack(side="left", padx=8)
 
-        self.openai_model_entry = ctk.CTkEntry(row_openai, width=140, fg_color="#0F172A")
-        self.openai_model_entry.insert(0, config_manager.config.openai_model)
-        self.openai_model_entry.pack(side="left", padx=8)
-
-        test_cloud_btn = ctk.CTkButton(
-            row_openai,
-            text="☁️ Save & Test Cloud",
-            font=FONTS["body_sm_bold"],
-            width=130,
-            fg_color="#334155",
-            hover_color="#475569",
-            command=self._save_and_test_cloud,
+        self.openai_key_field = ft.TextField(
+            value=credential_manager.get_openai_key() or "",
+            label="OpenAI API Key (Optional)",
+            password=True,
+            can_reveal_password=True,
+            border_color=COLORS["border"],
+            bgcolor=COLORS["bg_card"],
+            focused_border_color=COLORS["primary"],
+            expand=True,
+            content_padding=10,
         )
-        test_cloud_btn.pack(side="left", padx=8)
 
-    # --- Section 2: Google OAuth & Credentials ---
-    def _build_oauth_section(self) -> None:
-        card = self._create_card("🔐 Gmail Authentication & Accounts")
+        # Section 2: Account Status
+        self.account_status_text = ft.Text("Checking account...", size=14, color=COLORS["text_primary"])
 
-        row_auth = ctk.CTkFrame(card, fg_color="transparent")
-        row_auth.pack(fill="x", padx=16, pady=8)
-
-        ctk.CTkLabel(row_auth, text="Google credentials.json:", font=FONTS["body"], width=160, anchor="w").pack(side="left")
-        
-        self.creds_path_lbl = ctk.CTkLabel(
-            row_auth,
-            text=config_manager.config.credentials_path or "No file selected (Optional for Demo)",
-            font=FONTS["body_sm"],
-            text_color="#94A3B8",
-            width=280,
-            anchor="w",
+        # Section 3: Safety Guardrails
+        self.confidence_slider = ft.Slider(
+            min=50,
+            max=95,
+            divisions=9,
+            value=int(config_manager.config.min_confidence_auto_action * 100),
+            label="{value}%",
+            active_color=COLORS["primary"],
+            on_change=self._on_confidence_change,
         )
-        self.creds_path_lbl.pack(side="left", padx=8)
+        self.confidence_val_text = ft.Text(f"{int(config_manager.config.min_confidence_auto_action * 100)}%", size=14, weight=ft.FontWeight.BOLD, color=COLORS["primary"])
 
-        browse_btn = ctk.CTkButton(
-            row_auth,
-            text="📁 Browse File...",
-            font=FONTS["body_sm"],
-            width=120,
-            fg_color="#334155",
-            hover_color="#475569",
-            command=self._browse_credentials,
+        # Section 4: User Profile
+        self.user_name_field = ft.TextField(
+            value=user_profile_manager.profile.name or "Alex",
+            label="Your Name",
+            border_color=COLORS["border"],
+            bgcolor=COLORS["bg_card"],
+            focused_border_color=COLORS["primary"],
+            width=260,
+            content_padding=10,
         )
-        browse_btn.pack(side="left", padx=8)
 
-        login_btn = ctk.CTkButton(
-            row_auth,
-            text="🔑 Google Login",
-            font=FONTS["body_sm_bold"],
-            width=120,
-            fg_color=THEME["dark"]["primary"],
-            hover_color=THEME["dark"]["primary_hover"],
-            command=self._start_google_login,
+        self.user_role_field = ft.TextField(
+            value=user_profile_manager.profile.role or "Executive",
+            label="Primary Role / Title",
+            border_color=COLORS["border"],
+            bgcolor=COLORS["bg_card"],
+            focused_border_color=COLORS["primary"],
+            width=260,
+            content_padding=10,
         )
-        login_btn.pack(side="left", padx=8)
 
-        # Demo Mode Button
-        row_demo = ctk.CTkFrame(card, fg_color="transparent")
-        row_demo.pack(fill="x", padx=16, pady=8)
+        content = ft.Column(
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
+            spacing=20,
+            controls=[
+                # Header
+                ft.Text("Settings & Intelligence Control", size=24, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
 
-        ctk.CTkLabel(row_demo, text="Demo / Testing Mode:", font=FONTS["body"], width=160, anchor="w").pack(side="left")
+                # Section 1: AI Engine Router
+                self._section_card(
+                    title="🧠 Hybrid AI Router Configuration",
+                    subtitle="Configure local Ollama execution and optional cloud LLM fallback.",
+                    controls=[
+                        ft.Row([
+                            ft.Text("Active Routing Mode:", size=13, weight=ft.FontWeight.W_600, color=COLORS["text_primary"]),
+                            self.ai_mode_dropdown,
+                        ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=12),
+                        ft.Divider(height=1, color=COLORS["border"]),
+                        ft.Row([
+                            self.ollama_url_field,
+                            self.ollama_model_field,
+                            ft.ElevatedButton("Test Ollama", icon=ft.Icons.CHECK, bgcolor=COLORS["primary"], color=COLORS["text_primary"], on_click=lambda e: self._test_ollama()),
+                        ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
+                        ft.Row([
+                            self.openai_key_field,
+                            ft.ElevatedButton("Save Key", icon=ft.Icons.KEY, bgcolor=COLORS["secondary"], color=COLORS["text_primary"], on_click=lambda e: self._save_openai_key()),
+                        ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
+                    ],
+                ),
 
-        seed_btn = ctk.CTkButton(
-            row_demo,
-            text="🧪 Reset / Seed Realistic Demo Data",
-            font=FONTS["body_sm_bold"],
-            width=240,
-            fg_color="#059669",
-            hover_color="#047857",
-            command=self._seed_demo_action,
+                # Section 2: Gmail OAuth Connection
+                self._section_card(
+                    title="🔐 Gmail OAuth 2.0 Authorization",
+                    subtitle="Manage token permissions and Google Cloud authentication.",
+                    controls=[
+                        ft.Row([
+                            ft.Icon(ft.Icons.ACCOUNT_CIRCLE_OUTLINED, size=24, color=COLORS["success"]),
+                            self.account_status_text,
+                            ft.Container(expand=True),
+                            ft.ElevatedButton("Re-Authenticate Gmail", icon=ft.Icons.LOGIN, bgcolor=COLORS["primary"], color=COLORS["text_primary"], on_click=lambda e: self._reauth_gmail()),
+                            ft.OutlinedButton("Disconnect", icon=ft.Icons.LOGOUT, style=ft.ButtonStyle(color=COLORS["danger"]), on_click=lambda e: self._disconnect_gmail()),
+                        ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+                    ],
+                ),
+
+                # Section 3: Safety Guardrails
+                self._section_card(
+                    title="🛡️ Safety Guardrails & Thresholds",
+                    subtitle="Set minimum confidence required before proposing automated actions.",
+                    controls=[
+                        ft.Row([
+                            ft.Text("Minimum AI Confidence for Auto-Suggestions:", size=13, color=COLORS["text_primary"]),
+                            ft.Container(expand=True),
+                            self.confidence_val_text,
+                        ]),
+                        self.confidence_slider,
+                    ],
+                ),
+
+                # Section 4: User Personalization
+                self._section_card(
+                    title="👤 User Personalization & AI Memory",
+                    subtitle="Personalize how the AI Reply Assistant formats greetings, tone, and signatures.",
+                    controls=[
+                        ft.Row([
+                            self.user_name_field,
+                            self.user_role_field,
+                            ft.ElevatedButton("Save Profile", icon=ft.Icons.SAVE, bgcolor=COLORS["success"], color=COLORS["text_primary"], on_click=lambda e: self._save_profile()),
+                        ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+                    ],
+                ),
+
+                # Section 5: Data & Backup Tools
+                self._section_card(
+                    title="💾 Data Management & Demo Tools",
+                    subtitle="Export encrypted database backups or re-seed realistic demo data.",
+                    controls=[
+                        ft.Row([
+                            ft.OutlinedButton("Export Backup Archive (.zip)", icon=ft.Icons.DOWNLOAD, on_click=lambda e: self._export_backup()),
+                            ft.OutlinedButton("Reset Demo Dataset", icon=ft.Icons.REFRESH, on_click=lambda e: self._seed_demo()),
+                        ], spacing=12),
+                    ],
+                ),
+            ],
         )
-        seed_btn.pack(side="left", padx=8)
 
-    # --- Section 3: Safety Guardrails ---
-    def _build_safety_section(self) -> None:
-        card = self._create_card("🛡️ Safety Guardrails & Protected Domains")
-
-        row_info = ctk.CTkFrame(card, fg_color="transparent")
-        row_info.pack(fill="x", padx=16, pady=4)
-
-        ctk.CTkLabel(
-            row_info,
-            text="Protected entities (Banking, Legal, Medical, Gov) cannot be deleted or auto-archived without approval.",
-            font=FONTS["body_sm"],
-            text_color="#94A3B8",
-        ).pack(anchor="w")
-
-        # Protected Domains List Display
-        row_doms = ctk.CTkFrame(card, fg_color="transparent")
-        row_doms.pack(fill="x", padx=16, pady=8)
-
-        self.dom_entry = ctk.CTkEntry(
-            row_doms,
-            placeholder_text="Add domain: e.g., company.com",
-            font=FONTS["body_sm"],
-            width=240,
-            fg_color="#0F172A",
+        super().__init__(
+            content=content,
+            expand=True,
+            padding=ft.padding.all(24),
+            **kwargs,
         )
-        self.dom_entry.pack(side="left", padx=(0, 8))
 
-        add_dom_btn = ctk.CTkButton(
-            row_doms,
-            text="➕ Protect Domain",
-            font=FONTS["body_sm_bold"],
-            width=140,
-            fg_color="#334155",
-            hover_color="#475569",
-            command=self._add_domain,
+        self.refresh_data()
+
+    def refresh_data(self) -> None:
+        account = repository.get_active_account()
+        if account:
+            self.account_status_text.value = f"Authenticated as {account.email} (Active)"
+            self.account_status_text.color = COLORS["success"]
+        else:
+            self.account_status_text.value = "No active Gmail account connected (Demo Mode active)"
+            self.account_status_text.color = COLORS["warning"]
+
+        if self.page:
+            self.page.update()
+
+    def _section_card(self, title: str, subtitle: str, controls: list) -> ft.Container:
+        return ft.Container(
+            content=ft.Column([
+                ft.Text(title, size=16, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
+                ft.Text(subtitle, size=12, color=COLORS["text_secondary"]),
+                ft.Divider(height=1, color=COLORS["border"]),
+                ft.Column(controls, spacing=12),
+            ], spacing=10),
+            bgcolor=COLORS["bg_card"],
+            border=ft.border.all(1, COLORS["border"]),
+            border_radius=12,
+            padding=20,
         )
-        add_dom_btn.pack(side="left")
 
-    # --- Section 4: User Profile ---
-    def _build_profile_section(self) -> None:
-        card = self._create_card("👤 User Profile & AI Reply Signature")
+    def _on_ai_mode_change(self, e):
+        config_manager.update(ai_mode=self.ai_mode_dropdown.value)
+        if self.page:
+            self.page.open(ft.SnackBar(ft.Text(f"AI Mode set to {self.ai_mode_dropdown.value}"), bgcolor=COLORS["success"]))
 
-        row = ctk.CTkFrame(card, fg_color="transparent")
-        row.pack(fill="x", padx=16, pady=8)
+    def _test_ollama(self):
+        url = self.ollama_url_field.value.strip()
+        model = self.ollama_model_field.value.strip()
+        config_manager.update(ollama_url=url, ollama_model=model)
 
-        ctk.CTkLabel(row, text="Display Name:", font=FONTS["body"], width=140, anchor="w").pack(side="left")
-        self.name_entry = ctk.CTkEntry(row, width=200, fg_color="#0F172A")
-        self.name_entry.insert(0, user_profile_manager.profile.name)
-        self.name_entry.pack(side="left", padx=8)
-
-        save_prof_btn = ctk.CTkButton(
-            row,
-            text="Save Profile",
-            font=FONTS["body_sm_bold"],
-            width=110,
-            fg_color=THEME["dark"]["primary"],
-            hover_color=THEME["dark"]["primary_hover"],
-            command=self._save_profile,
-        )
-        save_prof_btn.pack(side="left", padx=8)
-
-    # --- Section 5: Backup & Export ---
-    def _build_backup_section(self) -> None:
-        card = self._create_card("💾 Backup & Disaster Recovery")
-
-        row = ctk.CTkFrame(card, fg_color="transparent")
-        row.pack(fill="x", padx=16, pady=8)
-
-        export_btn = ctk.CTkButton(
-            row,
-            text="📦 Export Backup (ZIP)",
-            font=FONTS["body_sm_bold"],
-            width=180,
-            fg_color="#10B981",
-            hover_color="#059669",
-            command=self._export_backup,
-        )
-        export_btn.pack(side="left", padx=(0, 12))
-
-    def _create_card(self, title: str) -> ctk.CTkFrame:
-        card = ctk.CTkFrame(
-            self.scroll,
-            fg_color=THEME["dark"]["bg_card"],
-            corner_radius=12,
-            border_width=1,
-            border_color=THEME["dark"]["border"],
-        )
-        card.pack(fill="x", pady=8)
-
-        c_header = ctk.CTkFrame(card, fg_color="transparent")
-        c_header.pack(fill="x", padx=16, pady=(14, 6))
-
-        ctk.CTkLabel(c_header, text=title, font=FONTS["h3"], text_color="#F8FAFC").pack(anchor="w")
-        return card
-
-    # --- Handlers ---
-    def _on_ai_mode_changed(self, new_mode: str) -> None:
-        config_manager.config.ai_mode = new_mode
-        config_manager.save()
-        ToastNotification.show(self.winfo_toplevel(), f"AI Router set to {new_mode}", "info")
-
-    def _test_ollama(self) -> None:
-        url = self.ollama_url_entry.get().strip()
-        model = self.ollama_model_entry.get().strip()
-        config_manager.config.ollama_url = url
-        config_manager.config.ollama_model = model
-        config_manager.save()
-
-        client = LocalOllamaClient(base_url=url, default_model=model)
+        client = LocalOllamaClient(base_url=url, model=model)
         if client.is_available():
-            ToastNotification.show(self.winfo_toplevel(), f"Ollama is running at {url}!", "success")
+            if self.page:
+                self.page.open(ft.SnackBar(ft.Text("Ollama connection successful! Model ready."), bgcolor=COLORS["success"]))
         else:
-            ToastNotification.show(self.winfo_toplevel(), f"Could not connect to Ollama at {url}", "error")
+            if self.page:
+                self.page.open(ft.SnackBar(ft.Text(f"Could not connect to Ollama at {url}"), bgcolor=COLORS["danger"]))
 
-    def _save_and_test_cloud(self) -> None:
-        key = self.openai_key_entry.get().strip()
-        model = self.openai_model_entry.get().strip()
+    def _save_openai_key(self):
+        key = self.openai_key_field.value.strip()
         if key:
-            config_manager.set_openai_api_key(key)
-        config_manager.config.openai_model = model
-        config_manager.save()
-
-        client = CloudOpenAIClient(api_key=key, default_model=model)
-        if client.test_connection():
-            ToastNotification.show(self.winfo_toplevel(), "OpenAI API connection verified!", "success")
+            credential_manager.save_openai_key(key)
+            if self.page:
+                self.page.open(ft.SnackBar(ft.Text("OpenAI API key saved encrypted!"), bgcolor=COLORS["success"]))
         else:
-            ToastNotification.show(self.winfo_toplevel(), "OpenAI Key test failed or rate limited.", "error")
+            credential_manager.delete_openai_key()
+            if self.page:
+                self.page.open(ft.SnackBar(ft.Text("OpenAI key cleared"), bgcolor=COLORS["text_secondary"]))
 
-    def _browse_credentials(self) -> None:
-        file_path = filedialog.askopenfilename(
-            title="Select Google OAuth credentials.json",
-            filetypes=[("JSON Files", "*.json")],
-        )
-        if file_path:
-            try:
-                credential_manager.set_credentials_file(file_path)
-                self.creds_path_lbl.configure(text=file_path)
-                ToastNotification.show(self.winfo_toplevel(), "Credentials saved successfully.", "success")
-            except Exception as e:
-                ToastNotification.show(self.winfo_toplevel(), str(e), "error")
-
-    def _start_google_login(self) -> None:
+    def _reauth_gmail(self):
+        if self.page:
+            self.page.open(ft.SnackBar(ft.Text("Opening browser for OAuth login..."), bgcolor=COLORS["primary"]))
         try:
-            email = oauth_manager.start_oauth_flow()
-            ToastNotification.show(self.winfo_toplevel(), f"Connected as {email}", "success")
+            oauth_manager.start_auth_flow()
+            self.refresh_data()
         except Exception as e:
-            ToastNotification.show(self.winfo_toplevel(), f"Login failed: {e}", "error")
+            if self.page:
+                self.page.open(ft.SnackBar(ft.Text(f"OAuth failed: {e}"), bgcolor=COLORS["danger"]))
 
-    def _seed_demo_action(self) -> None:
+    def _disconnect_gmail(self):
+        repository.disconnect_all_accounts()
+        self.refresh_data()
+        if self.page:
+            self.page.open(ft.SnackBar(ft.Text("Gmail account disconnected"), bgcolor=COLORS["warning"]))
+
+    def _on_confidence_change(self, e):
+        val = float(e.control.value) / 100.0
+        self.confidence_val_text.value = f"{int(e.control.value)}%"
+        config_manager.update(min_confidence_auto_action=val)
+        if self.page:
+            self.confidence_val_text.update()
+
+    def _save_profile(self):
+        name = self.user_name_field.value.strip()
+        role = self.user_role_field.value.strip()
+        user_profile_manager.update_profile(name=name, role=role)
+        if self.page:
+            self.page.open(ft.SnackBar(ft.Text("User profile saved!"), bgcolor=COLORS["success"]))
+
+    def _export_backup(self):
+        try:
+            now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = f"backup_gmailai_{now}.zip"
+            with zipfile.ZipFile(backup_path, 'w') as zipf:
+                zipf.write(config_manager.db_path, arcname="gmailai.db")
+                zipf.write(config_manager.config_file, arcname="config.json")
+            if self.page:
+                self.page.open(ft.SnackBar(ft.Text(f"Backup exported: {backup_path}"), bgcolor=COLORS["success"]))
+        except Exception as e:
+            if self.page:
+                self.page.open(ft.SnackBar(ft.Text(f"Backup failed: {e}"), bgcolor=COLORS["danger"]))
+
+    def _seed_demo(self):
         seed_demo_data()
-        ToastNotification.show(self.winfo_toplevel(), "Realistic demo emails and suggestions loaded!", "success")
-
-    def _add_domain(self) -> None:
-        dom = self.dom_entry.get().strip()
-        if dom:
-            safety_guard.add_protected_domain(dom)
-            if dom not in config_manager.config.protected_domains:
-                config_manager.config.protected_domains.append(dom)
-                config_manager.save()
-            self.dom_entry.delete(0, "end")
-            ToastNotification.show(self.winfo_toplevel(), f"Domain '{dom}' added to safety protection list.", "success")
-
-    def _save_profile(self) -> None:
-        name = self.name_entry.get().strip()
-        user_profile_manager.update_profile(name=name)
-        ToastNotification.show(self.winfo_toplevel(), "Profile updated!", "success")
-
-    def _export_backup(self) -> None:
-        out_file = filedialog.asksaveasfilename(
-            title="Save Backup Archive",
-            defaultextension=".zip",
-            initialfile=f"gmailai_backup_{datetime.date.today().strftime('%Y%m%d')}.zip",
-            filetypes=[("ZIP Archive", "*.zip")],
-        )
-        if out_file:
-            try:
-                with zipfile.ZipFile(out_file, "w", zipfile.ZIP_DEFLATED) as zipf:
-                    if config_manager.db_path.exists():
-                        zipf.write(config_manager.db_path, arcname="gmailai.db")
-                    if config_manager.config_file.exists():
-                        zipf.write(config_manager.config_file, arcname="config.json")
-                    if user_profile_manager.profile_path.exists():
-                        zipf.write(user_profile_manager.profile_path, arcname="user_profile.json")
-
-                ToastNotification.show(self.winfo_toplevel(), "Backup archive created successfully!", "success")
-            except Exception as e:
-                ToastNotification.show(self.winfo_toplevel(), f"Export failed: {e}", "error")
+        if self.page:
+            self.page.open(ft.SnackBar(ft.Text("Sample demo dataset refreshed!"), bgcolor=COLORS["success"]))

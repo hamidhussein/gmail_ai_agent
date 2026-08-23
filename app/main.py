@@ -1,21 +1,19 @@
 """
-GmailAI Assistant - Main Application Entrypoint & Window Orchestrator
+GmailAI Assistant - Master Flet Desktop Application Shell
 """
 import sys
 import logging
-import customtkinter as ctk
+import flet as ft
 from typing import Dict, Any
 
 from app.config import config_manager
 from core.logger import setup_logger
-from core.events import event_bus, EVT_SYNC_COMPLETED, EVT_SYNC_STARTED, EVT_TOAST_MESSAGE
+from core.events import event_bus, EVT_SYNC_COMPLETED, EVT_TOAST_MESSAGE
 from database.repository import repository
 from database.migrations import seed_demo_data
 from automation.scheduler import scheduler
-from resources.styles.theme import THEME
+from resources.styles.theme import COLORS
 
-from ui.components.navigation import SidebarNavigation
-from ui.components.toast import ToastNotification
 from ui.dashboard import DashboardView
 from ui.inbox_view import InboxIntelligenceView
 from ui.review_screen import ReviewScreenView
@@ -26,174 +24,238 @@ from ui.settings import SettingsView
 logger = logging.getLogger("GmailAI.Main")
 
 
-class GmailAIApp(ctk.CTk):
-    """Primary CustomTkinter Desktop Application Window."""
+class GmailAIApp:
+    """Master Application Controller coordinating navigation, views, background sync, and event bus."""
 
-    def __init__(self):
-        super().__init__()
-
-        # Appearance & Geometry
-        ctk.set_appearance_mode(config_manager.config.ui_theme)
-        ctk.set_default_color_theme("blue")
-
-        self.title("GmailAI Assistant — Privacy-First Hybrid AI Platform")
-        self.geometry("1240x820")
-        self.minsize(1080, 700)
-        self.configure(fg_color=THEME["dark"]["bg_main"])
-
-        # State & View cache
+    def __init__(self, page: ft.Page):
+        self.page = page
         self.current_tab = "dashboard"
-        self.views: Dict[str, ctk.CTkFrame] = {}
+        self.views: Dict[str, ft.Container] = {}
 
-        # Ensure initial database state
+        # Page configuration
+        page.title = "GmailAI Assistant — Privacy-First Hybrid AI Platform"
+        page.theme_mode = ft.ThemeMode.DARK
+        page.bgcolor = COLORS["bg_main"]
+        page.padding = 0
+        page.window.width = 1260
+        page.window.height = 840
+        page.window.min_width = 1080
+        page.window.min_height = 700
+
+        # Ensure demo data if database is empty
         self._init_data_if_needed()
 
-        # Build UI layout
-        self._build_layout()
-
-        # Subscribe to Event Bus
-        self._register_event_handlers()
-
-        # Start background scheduling
+        # Start scheduler
         scheduler.start()
 
-        # Protocol for clean shutdown
-        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        # Build Sidebar Navigation & Main Container
+        self._build_shell()
+
+        # Subscribe to Event Bus
+        self._register_events()
+
+        # Initial view
+        self.show_view("dashboard")
 
     def _init_data_if_needed(self) -> None:
-        """Seeds initial realistic data if fresh database."""
         stats = repository.get_inbox_stats()
         if stats["total_emails"] == 0:
             logger.info("Fresh database detected. Seeding sample demo data...")
             seed_demo_data()
 
-    def _build_layout(self) -> None:
-        # Left Navigation Sidebar
-        self.sidebar = SidebarNavigation(
-            self,
-            on_navigate=self.show_view,
-            current_tab="dashboard",
+    def _build_shell(self) -> None:
+        # Navigation Items
+        self.nav_items = [
+            ("dashboard", "Dashboard", ft.Icons.DASHBOARD_OUTLINED, ft.Icons.DASHBOARD),
+            ("inbox", "Intelligence Inbox", ft.Icons.INBOX_OUTLINED, ft.Icons.INBOX),
+            ("review", "Smart Cleanup", ft.Icons.CLEANING_SERVICES_OUTLINED, ft.Icons.CLEANING_SERVICES),
+            ("digests", "Daily Briefings", ft.Icons.CALENDAR_MONTH_OUTLINED, ft.Icons.CALENDAR_MONTH),
+            ("audit", "Audit Logs", ft.Icons.SECURITY_OUTLINED, ft.Icons.SECURITY),
+            ("settings", "Settings & AI", ft.Icons.SETTINGS_OUTLINED, ft.Icons.SETTINGS),
+        ]
+
+        self.nav_buttons: Dict[str, ft.Container] = {}
+        self.cleanup_badge_text = ft.Text("0", size=10, weight=ft.FontWeight.BOLD, color="#FFFFFF")
+        self.cleanup_badge_container = ft.Container(
+            content=self.cleanup_badge_text,
+            bgcolor=COLORS["danger"],
+            padding=ft.padding.symmetric(horizontal=6, vertical=2),
+            border_radius=10,
+            visible=False,
         )
-        self.sidebar.pack(side="left", fill="y")
 
-        # Right Main Content Container
-        self.content_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.content_container.pack(side="right", fill="both", expand=True)
+        nav_controls = []
+        for key, label, icon_outline, icon_filled in self.nav_items:
+            badge = self.cleanup_badge_container if key == "review" else None
+            btn = self._build_nav_btn(key, label, icon_outline, badge)
+            self.nav_buttons[key] = btn
+            nav_controls.append(btn)
 
-        # Initialize and mount initial view
-        self.show_view("dashboard")
+        # User Status Footer Pill
+        self.user_email_text = ft.Text("Demo Account", size=12, color=COLORS["text_secondary"], no_wrap=True)
+        self.online_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor=COLORS["success"])
+
+        user_footer = ft.Container(
+            content=ft.Row([
+                self.online_dot,
+                self.user_email_text,
+            ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            padding=ft.padding.symmetric(horizontal=16, vertical=12),
+            bgcolor=COLORS["bg_card"],
+            border=ft.border.all(1, COLORS["border"]),
+            border_radius=10,
+        )
+
+        # Sidebar Container
+        self.sidebar = ft.Container(
+            width=240,
+            bgcolor=COLORS["bg_sidebar"],
+            border=ft.border.only(right=ft.BorderSide(1, COLORS["border"])),
+            padding=ft.padding.symmetric(horizontal=14, vertical=20),
+            content=ft.Column([
+                # Brand Logo Header
+                ft.Row([
+                    ft.Container(
+                        content=ft.Icon(ft.Icons.ALL_INCLUSIVE, size=20, color=COLORS["text_primary"]),
+                        bgcolor=COLORS["primary"],
+                        padding=6,
+                        border_radius=8,
+                    ),
+                    ft.Text("GmailAI", size=18, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
+                    ft.Container(
+                        content=ft.Text("PRO", size=10, weight=ft.FontWeight.BOLD, color=COLORS["badge_text"]),
+                        bgcolor=COLORS["badge_bg"],
+                        padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                        border_radius=4,
+                    ),
+                ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
+
+                ft.Container(height=16),
+
+                # Navigation Buttons List
+                ft.Column(nav_controls, spacing=6, expand=True),
+
+                # Bottom Account Footer
+                user_footer,
+            ], spacing=0, expand=True),
+        )
+
+        # Main Content Container
+        self.content_area = ft.Container(expand=True)
+
+        # Root Layout
+        self.page.add(
+            ft.Row([
+                self.sidebar,
+                self.content_area,
+            ], expand=True, spacing=0)
+        )
+
         self._update_badges()
+
+    def _build_nav_btn(self, key: str, label: str, icon_name: str, badge: ft.Container = None) -> ft.Container:
+        row_items = [
+            ft.Icon(icon_name, size=18, color=COLORS["text_secondary"]),
+            ft.Text(label, size=13, weight=ft.FontWeight.W_600, color=COLORS["text_secondary"], expand=True),
+        ]
+        if badge:
+            row_items.append(badge)
+
+        container = ft.Container(
+            content=ft.Row(row_items, alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+            padding=ft.padding.symmetric(horizontal=12, vertical=10),
+            border_radius=8,
+            on_click=lambda e, k=key: self.show_view(k),
+            animate=ft.animation.Animation(150, ft.AnimationCurve.EASE_OUT),
+        )
+        return container
 
     def show_view(self, tab_key: str) -> None:
-        """Swaps active view with caching — on second visit, just re-shows the cached view and calls refresh()."""
+        """Swaps active view in the main content container with view caching."""
         self.current_tab = tab_key
-        self.sidebar.set_active_tab(tab_key)
 
-        # Hide all current children
-        for child in self.content_container.winfo_children():
-            child.pack_forget()
+        # Update sidebar styling
+        for key, btn in self.nav_buttons.items():
+            is_active = (key == tab_key)
+            btn.bgcolor = COLORS["primary"] if is_active else None
+            # Update row icon & text color
+            row = btn.content
+            row.controls[0].color = "#FFFFFF" if is_active else COLORS["text_secondary"]
+            row.controls[1].color = "#FFFFFF" if is_active else COLORS["text_secondary"]
+            btn.update()
 
-        try:
-            # Return cached view if it exists, otherwise build fresh
-            if tab_key in self.views:
-                view = self.views[tab_key]
-                view.pack(fill="both", expand=True)
-                # Call refresh if available safely
-                if hasattr(view, "refresh_data"):
-                    try:
-                        view.refresh_data()
-                    except Exception as ref_err:
-                        logger.warning(f"Error refreshing cached view '{tab_key}': {ref_err}")
+        # Load or retrieve cached view
+        if tab_key not in self.views:
+            if tab_key == "dashboard":
+                view = DashboardView(page=self.page, on_navigate=self.show_view)
+            elif tab_key == "inbox":
+                view = InboxIntelligenceView(page=self.page)
+            elif tab_key == "review":
+                view = ReviewScreenView(page=self.page)
+            elif tab_key == "digests":
+                view = DailyDigestsView(page=self.page)
+            elif tab_key == "audit":
+                view = AuditLogsView(page=self.page)
+            elif tab_key == "settings":
+                view = SettingsView(page=self.page)
             else:
-                view = self._build_view(tab_key)
-                if view:
-                    self.views[tab_key] = view
-                    view.pack(fill="both", expand=True)
-        except Exception as exc:
-            self.views.pop(tab_key, None)
-            logger.error(f"Unhandled error loading view '{tab_key}': {exc}", exc_info=True)
-            self._show_error_view(tab_key, exc)
+                view = DashboardView(page=self.page, on_navigate=self.show_view)
 
-        self._update_badges()
-
-    def _build_view(self, tab_key: str):
-        """Instantiates the correct view for a given tab key."""
-        if tab_key == "dashboard":
-            return DashboardView(self.content_container, on_navigate=self.show_view)
-        elif tab_key == "inbox":
-            return InboxIntelligenceView(self.content_container)
-        elif tab_key == "review":
-            return ReviewScreenView(self.content_container)
-        elif tab_key == "digests":
-            return DailyDigestsView(self.content_container)
-        elif tab_key == "audit":
-            return AuditLogsView(self.content_container)
-        elif tab_key == "settings":
-            return SettingsView(self.content_container)
+            self.views[tab_key] = view
         else:
-            return DashboardView(self.content_container, on_navigate=self.show_view)
+            view = self.views[tab_key]
+            if hasattr(view, "refresh_data"):
+                try:
+                    view.refresh_data()
+                except Exception as ex:
+                    logger.warning(f"Error during refresh_data on view {tab_key}: {ex}")
 
-    def _show_error_view(self, tab_key: str, exc: Exception) -> None:
-        """Renders an in-app error card when a view fails to load."""
-        error_frame = ctk.CTkFrame(self.content_container, fg_color="#1E1E2E", corner_radius=0)
-        error_frame.pack(fill="both", expand=True)
-
-        # Centred error card
-        card = ctk.CTkFrame(error_frame, fg_color="#2A2A3D", corner_radius=16, width=520)
-        card.place(relx=0.5, rely=0.5, anchor="center")
-
-        ctk.CTkLabel(
-            card, text="⚠", font=("Inter", 48), text_color="#F59E0B"
-        ).pack(pady=(32, 4))
-        ctk.CTkLabel(
-            card, text=f"Failed to load '{tab_key}' view",
-            font=("Inter", 18, "bold"), text_color="#F1F5F9"
-        ).pack(pady=(0, 8))
-        ctk.CTkLabel(
-            card, text=str(exc), font=("Inter", 12), text_color="#94A3B8",
-            wraplength=440, justify="center"
-        ).pack(pady=(0, 20))
-        ctk.CTkButton(
-            card, text="⟳  Retry", font=("Inter", 14, "bold"),
-            fg_color="#6366F1", hover_color="#4F46E5", corner_radius=8,
-            command=lambda: self.show_view(tab_key),
-        ).pack(pady=(0, 28))
+        self.content_area.content = view
+        self._update_badges()
+        self.page.update()
 
     def _update_badges(self) -> None:
-        """Updates sidebar notification badge counts."""
         stats = repository.get_inbox_stats()
         cleanup_count = stats.get("cleanup_suggested_emails", 0)
-        self.sidebar.update_badge("review_badge", cleanup_count)
 
-        acc = repository.get_active_account()
-        if acc:
-            self.sidebar.update_user_status(acc.email, is_online=True)
+        if cleanup_count > 0:
+            self.cleanup_badge_text.value = str(cleanup_count)
+            self.cleanup_badge_container.visible = True
         else:
-            self.sidebar.update_user_status("Demo Account", is_online=False)
+            self.cleanup_badge_container.visible = False
 
-    def _register_event_handlers(self) -> None:
-        event_bus.subscribe(EVT_SYNC_COMPLETED, lambda data: self.after(0, self._on_sync_event))
-        event_bus.subscribe(EVT_TOAST_MESSAGE, lambda data: self.after(0, lambda: ToastNotification.show(self, str(data))))
+        account = repository.get_active_account()
+        if account:
+            self.user_email_text.value = account.email
+            self.online_dot.bgcolor = COLORS["success"]
+        else:
+            self.user_email_text.value = "Demo Mode"
+            self.online_dot.bgcolor = COLORS["warning"]
 
-    def _on_sync_event(self) -> None:
-        # Invalidate dashboard cache so next visit rebuilds fresh data
+        if self.page:
+            self.page.update()
+
+    def _register_events(self) -> None:
+        event_bus.subscribe(EVT_SYNC_COMPLETED, lambda data: self._on_sync_event(data))
+        event_bus.subscribe(EVT_TOAST_MESSAGE, lambda msg: self._show_toast(str(msg)))
+
+    def _on_sync_event(self, data) -> None:
+        # Invalidate dashboard cached view to ensure complete refresh
         self.views.pop("dashboard", None)
         self._update_badges()
         if self.current_tab == "dashboard":
             self.show_view("dashboard")
 
-    def _on_close(self) -> None:
-        logger.info("Application closing...")
-        scheduler.stop()
-        self.destroy()
-        sys.exit(0)
+    def _show_toast(self, message: str) -> None:
+        if self.page:
+            self.page.open(ft.SnackBar(ft.Text(message), bgcolor=COLORS["primary"]))
+            self.page.update()
 
 
-def main():
+def main(page: ft.Page):
     setup_logger(log_dir=config_manager.log_dir)
-    app = GmailAIApp()
-    app.mainloop()
+    GmailAIApp(page)
 
 
 if __name__ == "__main__":
-    main()
+    ft.app(target=main)

@@ -1,86 +1,82 @@
 """
-GmailAI Assistant - Metric Stat Card Component
+GmailAI Assistant - Metric Stat Card Component for Flet
 """
-import customtkinter as ctk
+import flet as ft
 from typing import Optional
-from resources.styles.theme import FONTS, THEME
+from resources.styles.theme import COLORS
 
 
-class StatCard(ctk.CTkFrame):
-    """Clean modern stat widget displaying metric, icon, title, and badge."""
+class StatCard(ft.Container):
+    """Modern glassmorphic stat card widget with hover elevation and accent glowing border."""
 
     def __init__(
         self,
-        master,
         title: str,
         value: str,
-        icon: str = "📊",
+        icon: str = ft.Icons.ANALYTICS_OUTLINED,
         trend: Optional[str] = None,
         accent_color: str = "#6366F1",
+        expand: bool = True,
         **kwargs,
     ):
-        super().__init__(
-            master,
-            fg_color=THEME["dark"]["bg_card"],
-            corner_radius=14,
-            border_width=1,
-            border_color=THEME["dark"]["border"],
-            **kwargs,
+        self.value_text = ft.Text(
+            value,
+            size=28,
+            weight=ft.FontWeight.BOLD,
+            color=COLORS["text_primary"],
         )
-        self.title_text = title
         self.accent_color = accent_color
 
-        # Hover effects
-        self.bind("<Enter>", lambda e: self.configure(border_color=THEME["dark"]["text_secondary"]))
-        self.bind("<Leave>", lambda e: self.configure(border_color=THEME["dark"]["border"]))
-
-        # Header with icon and title
-        header = ctk.CTkFrame(self, fg_color="transparent")
-        header.pack(fill="x", padx=18, pady=(18, 6))
-
-        # We keep emojis for now if passed in, but add a nice background circle
-        self.icon_label = ctk.CTkLabel(
-            header,
-            text=icon,
-            font=("Segoe UI Emoji", 16),
-            width=32,
-            height=32,
-            fg_color=THEME["dark"]["bg_card_hover"],
-            corner_radius=16, # Full circle
+        content = ft.Column(
+            controls=[
+                ft.Row(
+                    controls=[
+                        ft.Container(
+                            content=ft.Icon(icon, size=18, color=accent_color),
+                            bgcolor=COLORS["bg_card_hover"],
+                            padding=8,
+                            border_radius=8,
+                        ),
+                        ft.Text(
+                            title.upper(),
+                            size=12,
+                            weight=ft.FontWeight.W_600,
+                            color=COLORS["text_secondary"],
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.START,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=10,
+                ),
+                self.value_text,
+                ft.Text(
+                    trend or "",
+                    size=12,
+                    color=accent_color if trend else COLORS["text_muted"],
+                    weight=ft.FontWeight.W_500,
+                ),
+            ],
+            spacing=8,
         )
-        self.icon_label.pack(side="left", padx=(0, 10))
 
-        self.title_label = ctk.CTkLabel(
-            header,
-            text=title.upper(),
-            font=FONTS["body_sm_bold"],
-            text_color=THEME["dark"]["text_secondary"],
+        super().__init__(
+            content=content,
+            bgcolor=COLORS["bg_card"],
+            border=ft.border.all(1, COLORS["border"]),
+            border_radius=12,
+            padding=16,
+            expand=expand,
+            animate=ft.animation.Animation(200, ft.AnimationCurve.EASE_OUT),
+            on_hover=self._on_hover,
+            **kwargs,
         )
-        self.title_label.pack(side="left")
 
-        # Big Value Display
-        self.value_label = ctk.CTkLabel(
-            self,
-            text=value,
-            font=("Segoe UI", 28, "bold"),
-            text_color=THEME["dark"]["text_primary"],
-            anchor="w",
-        )
-        self.value_label.pack(fill="x", padx=18, pady=(2, 4))
-
-        # Optional trend or subtitle
-        if trend:
-            self.trend_label = ctk.CTkLabel(
-                self,
-                text=trend,
-                font=FONTS["body_sm"],
-                text_color=accent_color,
-                anchor="w",
-            )
-            self.trend_label.pack(fill="x", padx=18, pady=(0, 18))
-        else:
-            # Bottom spacer
-            ctk.CTkFrame(self, height=18, fg_color="transparent").pack()
+    def _on_hover(self, e):
+        self.border = ft.border.all(1, self.accent_color if e.data == "true" else COLORS["border"])
+        self.bgcolor = COLORS["bg_card_hover"] if e.data == "true" else COLORS["bg_card"]
+        self.update()
 
     def set_value(self, new_val: str) -> None:
-        self.value_label.configure(text=new_val)
+        self.value_text.value = new_val
+        if self.page:
+            self.value_text.update()

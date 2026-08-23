@@ -1,189 +1,157 @@
 """
-GmailAI Assistant - Daily AI Briefings Viewer
+GmailAI Assistant - Daily AI Briefings Viewer for Flet
 """
-import customtkinter as ctk
+import flet as ft
 from typing import List
-from resources.styles.theme import FONTS, THEME
+from resources.styles.theme import COLORS
 from database.repository import repository
 from database.models import DailyDigestRecord
 from automation.daily_digest import daily_digest_generator
-from ui.components.toast import ToastNotification
 
 
-class DigestCard(ctk.CTkFrame):
-    """A single collapsible digest card."""
+class DailyDigestsView(ft.Container):
+    """Historical daily executive briefings with collapsible markdown cards and on-demand generation."""
 
-    def __init__(self, master, digest: DailyDigestRecord, **kwargs):
+    def __init__(self, page: ft.Page, **kwargs):
+        self.page_ref = page
+        self.gen_btn_spinner = ft.ProgressRing(width=16, height=16, stroke_width=2, color=COLORS["text_primary"], visible=False)
+        self.gen_btn = ft.ElevatedButton(
+            content=ft.Row([
+                self.gen_btn_spinner,
+                ft.Text("Generate Today's Briefing", weight=ft.FontWeight.BOLD, size=13),
+            ], spacing=8, tight=True),
+            bgcolor=COLORS["primary"],
+            color=COLORS["text_primary"],
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+            on_click=lambda e: self._generate_now(),
+        )
+
+        self.digests_column = ft.Column(
+            spacing=12,
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
+        )
+
+        content = ft.Column(
+            expand=True,
+            spacing=16,
+            controls=[
+                ft.Row([
+                    ft.Column([
+                        ft.Text("Daily AI Intelligence Briefings", size=24, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
+                        ft.Text("Executive morning briefings summarizing inbox trends, VIP highlights, and action items.", size=13, color=COLORS["text_secondary"]),
+                    ], spacing=2),
+                    self.gen_btn,
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+
+                ft.Container(
+                    content=self.digests_column,
+                    expand=True,
+                ),
+            ],
+        )
+
         super().__init__(
-            master,
-            fg_color=THEME["dark"]["bg_card"],
-            corner_radius=12,
-            border_width=1,
-            border_color=THEME["dark"]["border"],
+            content=content,
+            expand=True,
+            padding=ft.padding.all(24),
             **kwargs,
         )
-        self._expanded = False
-        self._digest = digest
-        self._build(digest)
 
-    def _build(self, d: DailyDigestRecord) -> None:
-        # Header row (always visible)
-        header = ctk.CTkFrame(self, fg_color="transparent", cursor="hand2")
-        header.pack(fill="x", padx=20, pady=14)
-
-        # Date label
-        ctk.CTkLabel(
-            header,
-            text=f"\u2139  Briefing — {d.digest_date}",
-            font=FONTS["h3"],
-            text_color=THEME["dark"]["text_primary"],
-        ).pack(side="left")
-
-        # Stats badges row
-        stats_frame = ctk.CTkFrame(header, fg_color="transparent")
-        stats_frame.pack(side="right", padx=(8, 0))
-
-        badge_data = [
-            (f"{d.total_emails} emails", THEME["dark"]["secondary"]),
-            (f"{d.important_count} VIP", THEME["dark"]["success"]),
-            (f"{d.need_reply_count} replies", THEME["dark"]["warning"]),
-            (f"{d.cleanup_suggested_count} cleanup", THEME["dark"]["danger"]),
-        ]
-        for label_text, color in badge_data:
-            ctk.CTkLabel(
-                stats_frame,
-                text=f" {label_text} ",
-                font=FONTS["body_sm_bold"],
-                fg_color=color,
-                text_color="#FFFFFF",
-                corner_radius=6,
-                padx=4,
-            ).pack(side="left", padx=3)
-
-        # Expand toggle button
-        self._toggle_btn = ctk.CTkButton(
-            header,
-            text="\u25bc",
-            width=28,
-            height=28,
-            font=("Segoe UI", 12),
-            fg_color=THEME["dark"]["border"],
-            hover_color=THEME["dark"]["bg_card_hover"],
-            text_color=THEME["dark"]["text_secondary"],
-            command=self._toggle,
-        )
-        self._toggle_btn.pack(side="right", padx=(12, 0))
-
-        # Bind click on header row too
-        header.bind("<Button-1>", lambda e: self._toggle())
-
-        # Separator
-        sep = ctk.CTkFrame(self, height=1, fg_color=THEME["dark"]["border"])
-        sep.pack(fill="x", padx=16)
-        self._sep = sep
-
-        # Content textbox (hidden by default)
-        self._txt = ctk.CTkTextbox(
-            self,
-            fg_color="transparent",
-            text_color="#CBD5E1",
-            font=FONTS["body"],
-            height=160,
-            wrap="word",
-        )
-        self._txt.insert("1.0", d.summary_markdown)
-        self._txt.configure(state="disabled")
-        # Don't pack yet (collapsed by default)
-        self._sep.pack_forget()
-
-    def _toggle(self) -> None:
-        self._expanded = not self._expanded
-        if self._expanded:
-            self._toggle_btn.configure(text="\u25b2")
-            self._sep.pack(fill="x", padx=16)
-            self._txt.pack(fill="both", expand=True, padx=20, pady=(8, 16))
-        else:
-            self._toggle_btn.configure(text="\u25bc")
-            self._txt.pack_forget()
-            self._sep.pack_forget()
-
-
-class DailyDigestsView(ctk.CTkFrame):
-    """Displays historical daily executive briefings with collapsible cards."""
-
-    def __init__(self, master, **kwargs):
-        super().__init__(master, fg_color="transparent", **kwargs)
-        self._build_ui()
         self.load_digests()
 
-    def _build_ui(self) -> None:
-        header = ctk.CTkFrame(self, fg_color="transparent")
-        header.pack(fill="x", padx=28, pady=(24, 16))
-
-        title_box = ctk.CTkFrame(header, fg_color="transparent")
-        title_box.pack(side="left")
-
-        ctk.CTkLabel(
-            title_box,
-            text="\u2606  Daily AI Intelligence Briefings",
-            font=FONTS["h1"],
-            text_color=THEME["dark"]["text_primary"],
-        ).pack(anchor="w")
-
-        ctk.CTkLabel(
-            title_box,
-            text="Executive morning briefings — click any card to expand the full summary.",
-            font=FONTS["body"],
-            text_color=THEME["dark"]["text_secondary"],
-        ).pack(anchor="w", pady=(2, 0))
-
-        gen_btn = ctk.CTkButton(
-            header,
-            text="\u2728 Generate Today's Briefing",
-            font=FONTS["body_bold"],
-            fg_color=THEME["dark"]["primary"],
-            hover_color=THEME["dark"]["primary_hover"],
-            height=38,
-            corner_radius=8,
-            command=self._generate_now,
-        )
-        gen_btn.pack(side="right")
-
-        self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self.scroll_frame.pack(fill="both", expand=True, padx=28, pady=(0, 16))
-
     def refresh_data(self) -> None:
-        """Called by view caching."""
         self.load_digests()
 
     def load_digests(self) -> None:
-        for w in self.scroll_frame.winfo_children():
-            w.destroy()
-
+        self.digests_column.controls.clear()
         session = repository.get_session()
         try:
-            digests = session.query(DailyDigestRecord).order_by(DailyDigestRecord.digest_date.desc()).limit(15).all()
+            digests = session.query(DailyDigestRecord).order_by(DailyDigestRecord.digest_date.desc()).limit(20).all()
         finally:
             session.close()
 
         if not digests:
-            ctk.CTkLabel(
-                self.scroll_frame,
-                text="No briefings yet. Click 'Generate Today's Briefing' to create one.",
-                font=FONTS["body"],
-                text_color=THEME["dark"]["text_muted"],
-            ).pack(pady=40)
+            self.digests_column.controls.append(
+                ft.Container(
+                    content=ft.Column([
+                        ft.Icon(ft.Icons.CALENDAR_MONTH, size=54, color=COLORS["text_muted"]),
+                        ft.Text("No briefings generated yet", size=18, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
+                        ft.Text("Click 'Generate Today's Briefing' above to create one.", size=13, color=COLORS["text_secondary"]),
+                    ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
+                    alignment=ft.alignment.center,
+                    padding=60,
+                )
+            )
+            if self.page:
+                self.page.update()
             return
 
         for d in digests:
-            card = DigestCard(self.scroll_frame, digest=d)
-            card.pack(fill="x", pady=6)
+            card = self._build_digest_card(d)
+            self.digests_column.controls.append(card)
+
+        if self.page:
+            self.page.update()
+
+    def _build_digest_card(self, d: DailyDigestRecord) -> ft.Container:
+        return ft.Container(
+            content=ft.ExpansionTile(
+                title=ft.Row([
+                    ft.Icon(ft.Icons.DESCRIPTION_OUTLINED, color=COLORS["primary"], size=20),
+                    ft.Text(f"Briefing Date: {d.digest_date}", size=15, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
+                    ft.Container(expand=True),
+                    ft.Row([
+                        self._badge(f"{d.total_emails} emails", COLORS["secondary"]),
+                        self._badge(f"{d.important_count} VIP", COLORS["success"]),
+                        self._badge(f"{d.need_reply_count} replies", COLORS["warning"]),
+                        self._badge(f"{d.cleanup_suggested_count} clutter", COLORS["danger"]),
+                    ], spacing=6),
+                ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                controls=[
+                    ft.Container(
+                        content=ft.Markdown(
+                            d.summary_markdown,
+                            selectable=True,
+                            extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                        ),
+                        padding=16,
+                        bgcolor=COLORS["bg_main"],
+                        border_radius=8,
+                    )
+                ],
+                initially_expanded=False,
+            ),
+            bgcolor=COLORS["bg_card"],
+            border=ft.border.all(1, COLORS["border"]),
+            border_radius=12,
+            padding=ft.padding.symmetric(horizontal=12, vertical=4),
+        )
+
+    def _badge(self, text: str, color: str) -> ft.Container:
+        return ft.Container(
+            content=ft.Text(text, size=11, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
+            bgcolor=color,
+            padding=ft.padding.symmetric(horizontal=8, vertical=4),
+            border_radius=6,
+        )
 
     def _generate_now(self) -> None:
+        self.gen_btn_spinner.visible = True
+        self.gen_btn.disabled = True
+        if self.page:
+            self.page.update()
+
         try:
             daily_digest_generator.generate_digest_for_today()
-            ToastNotification.show(self.winfo_toplevel(), "Today's briefing generated!", "success")
+            if self.page:
+                self.page.open(ft.SnackBar(ft.Text("Today's briefing generated!"), bgcolor=COLORS["success"]))
             self.load_digests()
         except Exception as e:
-            ToastNotification.show(self.winfo_toplevel(), f"Failed to generate briefing: {e}", "error")
-
+            if self.page:
+                self.page.open(ft.SnackBar(ft.Text(f"Failed to generate briefing: {e}"), bgcolor=COLORS["danger"]))
+        finally:
+            self.gen_btn_spinner.visible = False
+            self.gen_btn.disabled = False
+            if self.page:
+                self.page.update()
