@@ -108,5 +108,7 @@ def glass_container(
         border=border_all(1, border_color or COLORS["border"]),
         expand=expand,
         on_click=on_click,
-        animate=ft.animation.Animation(200, ft.AnimationCurve.EASE_OUT) if on_click else None,
+        animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT) if on_click else None,
     )
+
+

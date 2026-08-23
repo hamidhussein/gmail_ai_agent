@@ -231,7 +231,7 @@ class InboxIntelligenceView(ft.Container):
             border_radius=10,
             padding=12,
             on_click=lambda e, d=email_data: self._select_email(d),
-            animate=ft.animation.Animation(150, ft.AnimationCurve.EASE_OUT),
+            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
         )
 
     def _select_email(self, email_data: Dict[str, Any]) -> None:

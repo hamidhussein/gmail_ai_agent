@@ -172,7 +172,7 @@ class GmailAIApp:
             padding=padding_symmetric(horizontal=12, vertical=10),
             border_radius=8,
             on_click=lambda e, k=key: self.show_view(k),
-            animate=ft.animation.Animation(150, ft.AnimationCurve.EASE_OUT),
+            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
         )
         return container
 

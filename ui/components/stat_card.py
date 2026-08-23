@@ -66,7 +66,7 @@ class StatCard(ft.Container):
             border_radius=12,
             padding=16,
             expand=expand,
-            animate=ft.animation.Animation(200, ft.AnimationCurve.EASE_OUT),
+            animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
             on_hover=self._on_hover,
             **kwargs,
         )
