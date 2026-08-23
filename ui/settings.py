@@ -9,6 +9,7 @@ from resources.styles.theme import (
     border_all,
     padding_all,
     safe_update,
+    set_theme_mode,
 )
 from app.config import config_manager
 from authentication.credential_manager import credential_manager
@@ -20,7 +21,7 @@ from memory.user_profile import user_profile_manager
 
 
 class SettingsView(ft.Container):
-    """Full control panel for AI models, Gmail OAuth, safety thresholds, and profile settings."""
+    """Full control panel for AI models, Gmail OAuth, appearance, safety thresholds, and profile settings."""
 
     def __init__(self, page: ft.Page, **kwargs):
         self.page_ref = page
@@ -109,6 +110,20 @@ class SettingsView(ft.Container):
             content_padding=10,
         )
 
+        # Section 5: Appearance
+        self.theme_dropdown = ft.Dropdown(
+            value=config_manager.config.ui_theme or "light",
+            options=[
+                ft.DropdownOption("light"),
+                ft.DropdownOption("dark"),
+            ],
+            width=220,
+            border_color=COLORS["border"],
+            bgcolor=COLORS["bg_card"],
+            focused_border_color=COLORS["primary"],
+            on_select=self._on_theme_change,
+        )
+
         content = ft.Column(
             scroll=ft.ScrollMode.AUTO,
             expand=True,
@@ -168,7 +183,19 @@ class SettingsView(ft.Container):
                     ],
                 ),
 
-                # Section 4: User Personalization
+                # Section 4: Appearance & Theme
+                self._section_card(
+                    title="🎨 Appearance & Theme Palette",
+                    subtitle="Switch between crisp clean Light Mode and Obsidian Midnight Dark Mode.",
+                    controls=[
+                        ft.Row([
+                            ft.Text("Active Theme Mode:", size=13, weight=ft.FontWeight.W_600, color=COLORS["text_primary"]),
+                            self.theme_dropdown,
+                        ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=12),
+                    ],
+                ),
+
+                # Section 5: User Personalization
                 self._section_card(
                     title="👤 User Personalization & AI Memory",
                     subtitle="Personalize how the AI Reply Assistant formats greetings, tone, and signatures.",
@@ -181,7 +208,7 @@ class SettingsView(ft.Container):
                     ],
                 ),
 
-                # Section 5: Data & Backup Tools
+                # Section 6: Data & Backup Tools
                 self._section_card(
                     title="💾 Data Management & Demo Tools",
                     subtitle="Export encrypted database backups or re-seed realistic demo data.",
@@ -234,6 +261,20 @@ class SettingsView(ft.Container):
         config_manager.save()
         try:
             self.page_ref.open(ft.SnackBar(ft.Text(f"AI Mode set to {self.ai_mode_dropdown.value}"), bgcolor=COLORS["success"]))
+        except Exception:
+            pass
+
+    def _on_theme_change(self, e):
+        new_theme = self.theme_dropdown.value
+        config_manager.config.ui_theme = new_theme
+        config_manager.save()
+        set_theme_mode(new_theme)
+        if self.page_ref:
+            self.page_ref.theme_mode = ft.ThemeMode.LIGHT if new_theme == "light" else ft.ThemeMode.DARK
+            self.page_ref.bgcolor = COLORS["bg_main"]
+            safe_update(self.page_ref)
+        try:
+            self.page_ref.open(ft.SnackBar(ft.Text(f"Theme set to {new_theme.capitalize()} Mode"), bgcolor=COLORS["success"]))
         except Exception:
             pass
 

@@ -4,8 +4,27 @@ GmailAI Assistant - UI Design System & Theme Tokens for Flet
 import flet as ft
 from app.constants import EmailCategory, CATEGORY_COLORS
 
-# Core Color Palette - "Midnight Glass"
+# Core Color Palettes
 THEME = {
+    "light": {
+        "bg_main": "#F8FAFC",       # Clean Slate 50
+        "bg_card": "#FFFFFF",       # Crisp White Card
+        "bg_card_hover": "#F1F5F9", # Light Slate 100
+        "bg_sidebar": "#FFFFFF",    # Pure White Sidebar
+        "border": "#E2E8F0",        # Light Slate 200 Border
+        "text_primary": "#0F172A",  # Deep Slate 900
+        "text_secondary": "#64748B",# Slate 500
+        "text_muted": "#94A3B8",    # Slate 400
+        "primary": "#6366F1",       # Electric Indigo
+        "primary_hover": "#4F46E5", # Deep Indigo
+        "secondary": "#0EA5E9",     # Sky Blue
+        "success": "#10B981",       # Emerald
+        "warning": "#F59E0B",       # Amber
+        "danger": "#F43F5E",        # Coral
+        "danger_hover": "#E11D48",  # Rose Red
+        "badge_bg": "#EEF2FF",      # Indigo 50
+        "badge_text": "#4F46E5",    # Indigo 600
+    },
     "dark": {
         "bg_main": "#060913",       # Deep Midnight Blue (Obsidian)
         "bg_card": "#0F1423",       # Elevated Glass Surface
@@ -24,41 +43,20 @@ THEME = {
         "danger_hover": "#E11D48",  # Rose Red
         "badge_bg": "#1E1B4B",      # Deep Indigo Glow
         "badge_text": "#A5B4FC",    # Soft Indigo Text
-    },
-    "light": {
-        "bg_main": "#F8FAFC",
-        "bg_card": "#FFFFFF",
-        "bg_card_hover": "#F1F5F9",
-        "bg_sidebar": "#FFFFFF",
-        "border": "#E2E8F0",
-        "text_primary": "#0F172A",
-        "text_secondary": "#64748B",
-        "text_muted": "#94A3B8",
-        "primary": "#6366F1",
-        "primary_hover": "#4F46E5",
-        "secondary": "#0EA5E9",
-        "success": "#10B981",
-        "warning": "#F59E0B",
-        "danger": "#F43F5E",
-        "danger_hover": "#E11D48",
-        "badge_bg": "#EEF2FF",
-        "badge_text": "#4F46E5",
     }
 }
 
-COLORS = THEME["dark"]
+current_theme_mode = "light"
+COLORS = dict(THEME["light"])
 
-# Typography Tokens
-FONTS = {
-    "h1": ft.TextStyle(size=26, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
-    "h2": ft.TextStyle(size=20, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
-    "h3": ft.TextStyle(size=16, weight=ft.FontWeight.W_600, color=COLORS["text_primary"]),
-    "body_large": ft.TextStyle(size=15, color=COLORS["text_secondary"]),
-    "body": ft.TextStyle(size=13, color=COLORS["text_secondary"]),
-    "body_bold": ft.TextStyle(size=13, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
-    "body_sm": ft.TextStyle(size=11, color=COLORS["text_secondary"]),
-    "body_sm_bold": ft.TextStyle(size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
-}
+
+def set_theme_mode(mode: str) -> None:
+    """Dynamically updates active theme tokens in-place."""
+    global current_theme_mode
+    mode_key = "dark" if mode == "dark" else "light"
+    current_theme_mode = mode_key
+    COLORS.clear()
+    COLORS.update(THEME[mode_key])
 
 
 def get_category_color(category_str: str) -> str:
@@ -113,7 +111,7 @@ def glass_container(
     expand: bool = False,
     on_click=None,
 ) -> ft.Container:
-    """Creates a polished dark glassmorphic card container with subtle borders."""
+    """Creates a polished card container with subtle borders."""
     return ft.Container(
         content=content,
         padding=padding,

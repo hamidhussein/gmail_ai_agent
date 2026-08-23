@@ -59,7 +59,7 @@ class AppConfigModel(BaseModel):
     require_double_confirmation_for_delete: bool = True
 
     # UI Appearance
-    ui_theme: str = "dark"
+    ui_theme: str = "light"
     accent_color: str = "#6366F1"
 
     # Paths

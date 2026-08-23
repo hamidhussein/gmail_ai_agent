@@ -14,10 +14,12 @@ from database.migrations import seed_demo_data
 from automation.scheduler import scheduler
 from resources.styles.theme import (
     COLORS,
+    set_theme_mode,
     border_all,
     border_only,
     padding_all,
     padding_symmetric,
+    safe_update,
 )
 
 from ui.dashboard import DashboardView
@@ -38,9 +40,13 @@ class GmailAIApp:
         self.current_tab = "dashboard"
         self.views: Dict[str, ft.Container] = {}
 
+        # Set theme (Light mode by default)
+        initial_theme = config_manager.config.ui_theme or "light"
+        set_theme_mode(initial_theme)
+
         # Page configuration
         page.title = "GmailAI Assistant — Privacy-First Hybrid AI Platform"
-        page.theme_mode = ft.ThemeMode.DARK
+        page.theme_mode = ft.ThemeMode.LIGHT if initial_theme == "light" else ft.ThemeMode.DARK
         page.bgcolor = COLORS["bg_main"]
         page.padding = 0
         page.window.width = 1260
@@ -97,6 +103,32 @@ class GmailAIApp:
             self.nav_buttons[key] = btn
             nav_controls.append(btn)
 
+        # Theme Switcher Pill
+        is_light = (config_manager.config.ui_theme != "dark")
+        self.theme_icon = ft.Icon(
+            ft.Icons.DARK_MODE_OUTLINED if is_light else ft.Icons.LIGHT_MODE_OUTLINED,
+            size=16,
+            color=COLORS["text_secondary"],
+        )
+        self.theme_label = ft.Text(
+            "Switch to Dark" if is_light else "Switch to Light",
+            size=12,
+            weight=ft.FontWeight.W_500,
+            color=COLORS["text_secondary"],
+        )
+
+        self.theme_btn = ft.Container(
+            content=ft.Row([
+                self.theme_icon,
+                self.theme_label,
+            ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            padding=padding_symmetric(horizontal=14, vertical=9),
+            bgcolor=COLORS["bg_card"],
+            border=border_all(1, COLORS["border"]),
+            border_radius=8,
+            on_click=lambda e: self.toggle_theme(),
+        )
+
         # User Status Footer Pill
         self.user_email_text = ft.Text("Demo Account", size=12, color=COLORS["text_secondary"], no_wrap=True)
         self.online_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor=COLORS["success"])
@@ -106,7 +138,7 @@ class GmailAIApp:
                 self.online_dot,
                 self.user_email_text,
             ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            padding=padding_symmetric(horizontal=16, vertical=12),
+            padding=padding_symmetric(horizontal=14, vertical=10),
             bgcolor=COLORS["bg_card"],
             border=border_all(1, COLORS["border"]),
             border_radius=10,
@@ -122,7 +154,7 @@ class GmailAIApp:
                 # Brand Logo Header
                 ft.Row([
                     ft.Container(
-                        content=ft.Icon(ft.Icons.ALL_INCLUSIVE, size=20, color=COLORS["text_primary"]),
+                        content=ft.Icon(ft.Icons.ALL_INCLUSIVE, size=20, color="#FFFFFF"),
                         bgcolor=COLORS["primary"],
                         padding=6,
                         border_radius=8,
@@ -140,6 +172,10 @@ class GmailAIApp:
 
                 # Navigation Buttons List
                 ft.Column(nav_controls, spacing=6, expand=True),
+
+                # Theme Mode Switcher
+                self.theme_btn,
+                ft.Container(height=8),
 
                 # Bottom Account Footer
                 user_footer,
@@ -176,6 +212,28 @@ class GmailAIApp:
         )
         return container
 
+    def toggle_theme(self) -> None:
+        """Switches between Light and Dark mode with live theme token updates."""
+        new_theme = "dark" if config_manager.config.ui_theme == "light" else "light"
+        config_manager.config.ui_theme = new_theme
+        config_manager.save()
+        set_theme_mode(new_theme)
+
+        is_light = (new_theme == "light")
+        self.page.theme_mode = ft.ThemeMode.LIGHT if is_light else ft.ThemeMode.DARK
+        self.page.bgcolor = COLORS["bg_main"]
+
+        self.theme_icon.name = ft.Icons.DARK_MODE_OUTLINED if is_light else ft.Icons.LIGHT_MODE_OUTLINED
+        self.theme_label.value = "Switch to Dark" if is_light else "Switch to Light"
+
+        # Update sidebar styling
+        self.sidebar.bgcolor = COLORS["bg_sidebar"]
+        self.sidebar.border = border_only(right=ft.BorderSide(1, COLORS["border"]))
+
+        # Invalidate views to re-render in new theme palette
+        self.views.clear()
+        self.show_view(self.current_tab)
+
     def show_view(self, tab_key: str) -> None:
         """Swaps active view in the main content container with view caching."""
         self.current_tab = tab_key
@@ -184,11 +242,9 @@ class GmailAIApp:
         for key, btn in self.nav_buttons.items():
             is_active = (key == tab_key)
             btn.bgcolor = COLORS["primary"] if is_active else None
-            # Update row icon & text color
             row = btn.content
             row.controls[0].color = "#FFFFFF" if is_active else COLORS["text_secondary"]
             row.controls[1].color = "#FFFFFF" if is_active else COLORS["text_secondary"]
-
 
         # Load or retrieve cached view
         if tab_key not in self.views:
@@ -243,7 +299,6 @@ class GmailAIApp:
         event_bus.subscribe(EVT_TOAST_MESSAGE, lambda msg: self._show_toast(str(msg)))
 
     def _on_sync_event(self, data) -> None:
-        # Invalidate dashboard cached view to ensure complete refresh
         self.views.pop("dashboard", None)
         self._update_badges()
         if self.current_tab == "dashboard":
@@ -257,11 +312,10 @@ class GmailAIApp:
             pass
 
 
-
 def main(page: ft.Page):
     setup_logger(log_dir=config_manager.log_dir)
     GmailAIApp(page)
 
 
 if __name__ == "__main__":
-    ft.app(target=main)
+    ft.run(main)
