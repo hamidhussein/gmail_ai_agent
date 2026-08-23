@@ -46,6 +46,9 @@ class LocalOllamaClient:
         """
         Sends a prompt to Ollama requesting structured JSON output.
         """
+        if not self.is_available():
+            raise LocalModelUnavailableError(f"Ollama server is unreachable at {self.base_url}")
+
         target_model = model or self.default_model
         payload = {
             "model": target_model,
@@ -84,6 +87,9 @@ class LocalOllamaClient:
 
     def generate_text(self, prompt: str, system_prompt: str, model: Optional[str] = None) -> str:
         """Sends a text completion prompt to Ollama."""
+        if not self.is_available():
+            raise LocalModelUnavailableError(f"Ollama server is unreachable at {self.base_url}")
+
         target_model = model or self.default_model
         payload = {
             "model": target_model,
