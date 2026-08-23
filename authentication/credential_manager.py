@@ -59,5 +59,33 @@ class CredentialManager:
         self.credentials_path = file_path
         return True
 
+    def save_client_config_from_json(self, json_text: str) -> str:
+        """
+        Parses raw JSON text (pasted by user) and saves it as credentials.json.
+        Returns the saved file path on success.
+        Raises ConfigurationError on invalid JSON.
+        """
+        try:
+            data = json.loads(json_text.strip())
+        except json.JSONDecodeError as e:
+            raise ConfigurationError(f"Invalid JSON: {e}")
+
+        if "installed" not in data and "web" not in data:
+            raise ConfigurationError(
+                "Invalid format. The JSON must contain an 'installed' or 'web' key. "
+                "Make sure you downloaded 'OAuth 2.0 Client ID' (Desktop app) credentials from Google Cloud Console."
+            )
+
+        save_path = config_manager.base_dir / "credentials.json"
+        with open(save_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+        config_manager.config.credentials_path = str(save_path)
+        config_manager.save()
+        self.credentials_path = str(save_path)
+        logger.info(f"Google OAuth credentials saved to {save_path}")
+        return str(save_path)
+
 
 credential_manager = CredentialManager()
+

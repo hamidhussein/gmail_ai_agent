@@ -105,5 +105,9 @@ class OAuthManager:
                 break
         return success
 
+    def start_auth_flow(self, credentials_path: Optional[str] = None) -> Optional[str]:
+        """Alias for start_oauth_flow for backward compatibility."""
+        return self.start_oauth_flow(credentials_path)
+
 
 oauth_manager = OAuthManager()
