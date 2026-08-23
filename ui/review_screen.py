@@ -97,6 +97,10 @@ class ReviewScreenView(ctk.CTkFrame):
         self.list_container = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.list_container.pack(fill="both", expand=True, padx=28, pady=(0, 16))
 
+    def refresh_data(self) -> None:
+        """Called by view caching."""
+        self.load_suggestions()
+
     def load_suggestions(self) -> None:
         """Loads all pending cleanup suggestions."""
         for w in self.list_container.winfo_children():

@@ -195,14 +195,24 @@ class InboxIntelligenceView(ctk.CTkFrame):
             self._select_email_at_index(0)
 
     def _bind_keyboard(self) -> None:
-        """Bind Up/Down arrow and Enter/Delete for keyboard navigation."""
-        self.bind_all("<Up>",    lambda e: self._nav_email(-1))
-        self.bind_all("<Down>",  lambda e: self._nav_email(1))
-        self.bind_all("<Return>", lambda e: self._open_selected_keyboard())
-        self.bind_all("<Delete>", lambda e: self._archive_selected_keyboard())
+        """Bind Up/Down arrow and Enter/Delete for keyboard navigation safely."""
+        try:
+            top = self.winfo_toplevel()
+            if top:
+                top.bind("<Up>", lambda e: self._nav_email(-1), add="+")
+                top.bind("<Down>", lambda e: self._nav_email(1), add="+")
+                top.bind("<Return>", lambda e: self._open_selected_keyboard(), add="+")
+                top.bind("<Delete>", lambda e: self._archive_selected_keyboard(), add="+")
+        except Exception:
+            pass
 
     def _nav_email(self, direction: int) -> None:
         """Move selection up or down in the email list."""
+        try:
+            if not self.winfo_ismapped():
+                return
+        except Exception:
+            return
         if not self._email_list:
             return
         new_idx = max(0, min(len(self._email_list) - 1, self._selected_index + direction))
@@ -240,11 +250,21 @@ class InboxIntelligenceView(ctk.CTkFrame):
 
     def _open_selected_keyboard(self) -> None:
         """Open reply modal for selected email via Enter key."""
+        try:
+            if not self.winfo_ismapped():
+                return
+        except Exception:
+            return
         if self.selected_email:
             self._open_reply_modal(self.selected_email)
 
     def _archive_selected_keyboard(self) -> None:
         """Archive focused email via Delete key."""
+        try:
+            if not self.winfo_ismapped():
+                return
+        except Exception:
+            return
         if self.selected_email:
             self._quick_archive(self.selected_email)
 

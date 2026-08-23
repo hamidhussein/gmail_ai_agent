@@ -152,6 +152,10 @@ class DailyDigestsView(ctk.CTkFrame):
         self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.scroll_frame.pack(fill="both", expand=True, padx=28, pady=(0, 16))
 
+    def refresh_data(self) -> None:
+        """Called by view caching."""
+        self.load_digests()
+
     def load_digests(self) -> None:
         for w in self.scroll_frame.winfo_children():
             w.destroy()

@@ -98,19 +98,19 @@ class GmailAIApp(ctk.CTk):
             if tab_key in self.views:
                 view = self.views[tab_key]
                 view.pack(fill="both", expand=True)
-                # Call refresh if available
+                # Call refresh if available safely
                 if hasattr(view, "refresh_data"):
-                    view.refresh_data()
-                elif hasattr(view, "load_suggestions"):
-                    view.load_suggestions()
-                elif hasattr(view, "load_digests"):
-                    view.load_digests()
+                    try:
+                        view.refresh_data()
+                    except Exception as ref_err:
+                        logger.warning(f"Error refreshing cached view '{tab_key}': {ref_err}")
             else:
                 view = self._build_view(tab_key)
                 if view:
                     self.views[tab_key] = view
                     view.pack(fill="both", expand=True)
         except Exception as exc:
+            self.views.pop(tab_key, None)
             logger.error(f"Unhandled error loading view '{tab_key}': {exc}", exc_info=True)
             self._show_error_view(tab_key, exc)
 
