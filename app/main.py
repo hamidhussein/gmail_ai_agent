@@ -188,7 +188,7 @@ class GmailAIApp:
             row = btn.content
             row.controls[0].color = "#FFFFFF" if is_active else COLORS["text_secondary"]
             row.controls[1].color = "#FFFFFF" if is_active else COLORS["text_secondary"]
-            btn.update()
+
 
         # Load or retrieve cached view
         if tab_key not in self.views:
@@ -238,9 +238,6 @@ class GmailAIApp:
             self.user_email_text.value = "Demo Mode"
             self.online_dot.bgcolor = COLORS["warning"]
 
-        if self.page:
-            self.page.update()
-
     def _register_events(self) -> None:
         event_bus.subscribe(EVT_SYNC_COMPLETED, lambda data: self._on_sync_event(data))
         event_bus.subscribe(EVT_TOAST_MESSAGE, lambda msg: self._show_toast(str(msg)))
@@ -253,9 +250,12 @@ class GmailAIApp:
             self.show_view("dashboard")
 
     def _show_toast(self, message: str) -> None:
-        if self.page:
+        try:
             self.page.open(ft.SnackBar(ft.Text(message), bgcolor=COLORS["primary"]))
             self.page.update()
+        except Exception:
+            pass
+
 
 
 def main(page: ft.Page):

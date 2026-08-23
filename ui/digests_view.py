@@ -7,6 +7,8 @@ from resources.styles.theme import (
     border_all,
     padding_all,
     padding_symmetric,
+    safe_update,
+    align_center,
 )
 from database.repository import repository
 from database.models import DailyDigestRecord
@@ -83,20 +85,18 @@ class DailyDigestsView(ft.Container):
                         ft.Text("No briefings generated yet", size=18, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
                         ft.Text("Click 'Generate Today's Briefing' above to create one.", size=13, color=COLORS["text_secondary"]),
                     ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
-                    alignment=ft.alignment.center,
+                    alignment=align_center(),
                     padding=60,
                 )
             )
-            if self.page:
-                self.page.update()
+            safe_update(self.page_ref)
             return
 
         for d in digests:
             card = self._build_digest_card(d)
             self.digests_column.controls.append(card)
 
-        if self.page:
-            self.page.update()
+        safe_update(self.page_ref)
 
     def _build_digest_card(self, d: DailyDigestRecord) -> ft.Container:
         return ft.Container(
@@ -124,7 +124,7 @@ class DailyDigestsView(ft.Container):
                         border_radius=8,
                     )
                 ],
-                initially_expanded=False,
+                expanded=False,
             ),
             bgcolor=COLORS["bg_card"],
             border=border_all(1, COLORS["border"]),
@@ -143,19 +143,21 @@ class DailyDigestsView(ft.Container):
     def _generate_now(self) -> None:
         self.gen_btn_spinner.visible = True
         self.gen_btn.disabled = True
-        if self.page:
-            self.page.update()
+        safe_update(self.page_ref)
 
         try:
             daily_digest_generator.generate_digest_for_today()
-            if self.page:
-                self.page.open(ft.SnackBar(ft.Text("Today's briefing generated!"), bgcolor=COLORS["success"]))
+            try:
+                self.page_ref.open(ft.SnackBar(ft.Text("Today's briefing generated!"), bgcolor=COLORS["success"]))
+            except Exception:
+                pass
             self.load_digests()
         except Exception as e:
-            if self.page:
-                self.page.open(ft.SnackBar(ft.Text(f"Failed to generate briefing: {e}"), bgcolor=COLORS["danger"]))
+            try:
+                self.page_ref.open(ft.SnackBar(ft.Text(f"Failed to generate briefing: {e}"), bgcolor=COLORS["danger"]))
+            except Exception:
+                pass
         finally:
             self.gen_btn_spinner.visible = False
             self.gen_btn.disabled = False
-            if self.page:
-                self.page.update()
+            safe_update(self.page_ref)

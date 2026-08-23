@@ -7,6 +7,8 @@ from resources.styles.theme import (
     border_all,
     padding_all,
     padding_symmetric,
+    safe_update,
+    align_center,
 )
 from database.repository import repository
 
@@ -83,12 +85,11 @@ class AuditLogsView(ft.Container):
             self.logs_column.controls.append(
                 ft.Container(
                     content=ft.Text("No audit logs recorded yet.", size=13, color=COLORS["text_muted"]),
-                    alignment=ft.alignment.center,
+                    alignment=align_center(),
                     padding=40,
                 )
             )
-            if self.page:
-                self.page.update()
+            safe_update(self.page_ref)
             return
 
         for entry in logs:
@@ -106,7 +107,7 @@ class AuditLogsView(ft.Container):
                         padding=padding_symmetric(horizontal=6, vertical=2),
                         border_radius=4,
                         width=110,
-                        alignment=ft.alignment.center,
+                        alignment=align_center(),
                     ),
                     ft.Text(entry.sender or "(None)", size=12, color=COLORS["text_primary"], width=180, no_wrap=True),
                     ft.Text(entry.subject or "(No Subject)", size=12, color=COLORS["text_secondary"], expand=True, no_wrap=True),
@@ -120,5 +121,4 @@ class AuditLogsView(ft.Container):
             )
             self.logs_column.controls.append(row)
 
-        if self.page:
-            self.page.update()
+        safe_update(self.page_ref)

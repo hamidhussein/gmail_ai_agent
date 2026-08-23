@@ -2,7 +2,7 @@
 GmailAI Assistant - Executive Dashboard View for Flet
 """
 import flet as ft
-from typing import Callable
+from typing import Callable, Optional
 from resources.styles.theme import (
     COLORS,
     get_category_color,
@@ -10,6 +10,7 @@ from resources.styles.theme import (
     border_all,
     padding_all,
     padding_symmetric,
+    safe_update,
 )
 from ui.components.stat_card import StatCard
 from database.repository import repository
@@ -22,9 +23,10 @@ from ai.cloud_model import CloudOpenAIClient
 class DashboardView(ft.Container):
     """Executive Dashboard with live KPI cards, AI briefing, clutter banner, and activity stream."""
 
-    def __init__(self, page: ft.Page, on_navigate: Callable[[str], None], **kwargs):
+    def __init__(self, page: ft.Page, on_navigate: Optional[Callable[[str], None]] = None, **kwargs):
         self.page_ref = page
         self.on_navigate = on_navigate
+
 
         # Header controls
         self.account_sub_text = ft.Text("Connecting to Gmail...", size=13, color=COLORS["text_secondary"])
@@ -231,9 +233,7 @@ class DashboardView(ft.Container):
 
         # Activity list
         self._refresh_activity_feed()
-
-        if self.page:
-            self.page.update()
+        safe_update(self.page_ref)
 
     def _refresh_activity_feed(self) -> None:
         self.activity_column.controls.clear()
@@ -268,8 +268,7 @@ class DashboardView(ft.Container):
     def _handle_sync_click(self) -> None:
         self.sync_spinner.visible = True
         self.sync_btn.disabled = True
-        if self.page:
-            self.page.update()
+        safe_update(self.page_ref)
 
         scheduler.run_sync_now_async(on_complete=lambda: self._on_sync_done())
 
@@ -277,6 +276,9 @@ class DashboardView(ft.Container):
         self.sync_spinner.visible = False
         self.sync_btn.disabled = False
         self.refresh_data()
-        if self.page:
-            self.page.open(ft.SnackBar(ft.Text("Gmail sync completed!"), bgcolor=COLORS["success"]))
-            self.page.update()
+        try:
+            self.page_ref.open(ft.SnackBar(ft.Text("Gmail sync completed!"), bgcolor=COLORS["success"]))
+        except Exception:
+            pass
+        safe_update(self.page_ref)
+

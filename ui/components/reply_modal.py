@@ -28,14 +28,14 @@ class ReplyDialog(ft.AlertDialog):
         # Controls
         self.tone_dropdown = ft.Dropdown(
             value=self.selected_tone,
-            options=[ft.dropdown.Option(t.value) for t in ReplyTone],
+            options=[ft.DropdownOption(t.value) for t in ReplyTone],
             width=160,
             border_color=COLORS["border"],
             bgcolor=COLORS["bg_card"],
             focused_border_color=COLORS["primary"],
             text_size=13,
             content_padding=10,
-            on_change=self._on_tone_changed,
+            on_select=self._on_tone_changed,
         )
 
         self.custom_prompt = ft.TextField(
@@ -148,9 +148,11 @@ class ReplyDialog(ft.AlertDialog):
 
     def _on_text_changed(self, e):
         count = len((self.reply_editor.value or "").strip())
-        self.char_count_text.value = f"{count:,} chars"
-        if self.page:
-            self.char_count_text.update()
+        try:
+            if self.page:
+                self.char_count_text.update()
+        except Exception:
+            pass
 
     def _trigger_generation(self) -> None:
         self.spinner.visible = True

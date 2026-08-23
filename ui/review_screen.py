@@ -9,6 +9,8 @@ from resources.styles.theme import (
     border_all,
     padding_all,
     padding_symmetric,
+    safe_update,
+    align_center,
 )
 from database.repository import repository
 from database.models import CleanupSuggestion, EmailRecord
@@ -121,20 +123,18 @@ class ReviewScreenView(ft.Container):
                         ft.Text("Your Inbox is Clean!", size=20, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
                         ft.Text("No pending clutter suggestions at this time.", size=13, color=COLORS["text_secondary"]),
                     ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
-                    alignment=ft.alignment.center,
+                    alignment=align_center(),
                     padding=60,
                 )
             )
-            if self.page:
-                self.page.update()
+            safe_update(self.page_ref)
             return
 
         for sugg, email in self.suggestion_items:
             card = self._build_suggestion_row(sugg, email)
             self.suggestions_column.controls.append(card)
 
-        if self.page:
-            self.page.update()
+        safe_update(self.page_ref)
 
     def _build_suggestion_row(self, sugg: CleanupSuggestion, email: EmailRecord) -> ft.Container:
         cat = email.category or "PROMOTION"
@@ -191,8 +191,7 @@ class ReviewScreenView(ft.Container):
         else:
             self.selected_suggestion_ids.discard(sid)
         self.bulk_approve_btn.text = f"Approve Selected ({len(self.selected_suggestion_ids)})"
-        if self.page:
-            self.bulk_approve_btn.update()
+        safe_update(self.bulk_approve_btn)
 
     def _on_select_all_toggle(self, e):
         if e.control.value:
@@ -210,17 +209,23 @@ class ReviewScreenView(ft.Container):
 
             repository.update_suggestion_status(sugg.id, SuggestionStatus.EXECUTED.value)
             learning_engine.on_user_approved_action(email.sender, sugg.action_type)
-            if self.page:
-                self.page.open(ft.SnackBar(ft.Text(f"Cleaned: {email.subject[:30]}..."), bgcolor=COLORS["success"]))
+            try:
+                self.page_ref.open(ft.SnackBar(ft.Text(f"Cleaned: {email.subject[:30]}..."), bgcolor=COLORS["success"]))
+            except Exception:
+                pass
             self.load_suggestions()
         except Exception as ex:
-            if self.page:
-                self.page.open(ft.SnackBar(ft.Text(f"Error: {ex}"), bgcolor=COLORS["danger"]))
+            try:
+                self.page_ref.open(ft.SnackBar(ft.Text(f"Error: {ex}"), bgcolor=COLORS["danger"]))
+            except Exception:
+                pass
 
     def _dismiss_single(self, sugg: CleanupSuggestion):
         repository.update_suggestion_status(sugg.id, SuggestionStatus.REJECTED.value)
-        if self.page:
-            self.page.open(ft.SnackBar(ft.Text("Suggestion dismissed"), bgcolor=COLORS["text_secondary"]))
+        try:
+            self.page_ref.open(ft.SnackBar(ft.Text("Suggestion dismissed"), bgcolor=COLORS["text_secondary"]))
+        except Exception:
+            pass
         self.load_suggestions()
 
     def _bulk_approve(self):
@@ -240,13 +245,17 @@ class ReviewScreenView(ft.Container):
                 except Exception:
                     pass
 
-        if self.page:
-            self.page.open(ft.SnackBar(ft.Text(f"Successfully processed {approved_count} emails!"), bgcolor=COLORS["success"]))
+        try:
+            self.page_ref.open(ft.SnackBar(ft.Text(f"Successfully processed {approved_count} emails!"), bgcolor=COLORS["success"]))
+        except Exception:
+            pass
         self.load_suggestions()
 
     def _bulk_dismiss(self):
         for sid in self.selected_suggestion_ids:
             repository.update_suggestion_status(sid, SuggestionStatus.REJECTED.value)
-        if self.page:
-            self.page.open(ft.SnackBar(ft.Text("Dismissed selected suggestions"), bgcolor=COLORS["text_secondary"]))
+        try:
+            self.page_ref.open(ft.SnackBar(ft.Text("Dismissed selected suggestions"), bgcolor=COLORS["text_secondary"]))
+        except Exception:
+            pass
         self.load_suggestions()

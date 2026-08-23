@@ -11,6 +11,8 @@ from resources.styles.theme import (
     border_all,
     padding_all,
     padding_symmetric,
+    safe_update,
+    align_center,
 )
 from ui.components.reply_modal import ReplyDialog
 from database.repository import repository
@@ -125,8 +127,7 @@ class InboxIntelligenceView(ft.Container):
         self.current_category = cat
         for chip in self.filter_chips_row.controls:
             chip.selected = (chip.label.value == cat)
-        if self.page:
-            self.filter_chips_row.update()
+        safe_update(self.filter_chips_row)
         self.load_emails()
 
     def load_emails(self) -> None:
@@ -144,11 +145,10 @@ class InboxIntelligenceView(ft.Container):
                 ft.Container(
                     content=ft.Text("No emails found matching your filter.", size=14, color=COLORS["text_muted"]),
                     padding=40,
-                    alignment=ft.alignment.center,
+                    alignment=align_center(),
                 )
             )
-            if self.page:
-                self.page.update()
+            safe_update(self.page_ref)
             return
 
         for record in emails:
@@ -202,8 +202,7 @@ class InboxIntelligenceView(ft.Container):
             }
             self._select_email(first_dict)
 
-        if self.page:
-            self.page.update()
+        safe_update(self.page_ref)
 
     def _build_email_card(self, email_data: Dict[str, Any]) -> ft.Container:
         cat = email_data.get("category") or "PERSONAL"
@@ -238,8 +237,7 @@ class InboxIntelligenceView(ft.Container):
         self.selected_email = email_data
         learning_engine.on_user_email_opened(email_data.get("sender", ""))
         self._render_detail_drawer(email_data)
-        if self.page:
-            self.page.update()
+        safe_update(self.page_ref)
 
     def _render_detail_drawer(self, data: Dict[str, Any]) -> None:
         cat = data.get("category") or "PERSONAL"

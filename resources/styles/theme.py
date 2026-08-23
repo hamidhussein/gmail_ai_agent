@@ -90,6 +90,20 @@ def padding_symmetric(horizontal: float = 0, vertical: float = 0) -> ft.Padding:
     return ft.Padding(horizontal, vertical, horizontal, vertical)
 
 
+def align_center() -> ft.Alignment:
+    """Returns centered alignment."""
+    return ft.Alignment(0, 0)
+
+
+def safe_update(control: ft.Control) -> None:
+    """Safely updates a control or page without raising RuntimeError if not mounted."""
+    try:
+        if control is not None:
+            control.update()
+    except Exception:
+        pass
+
+
 def glass_container(
     content: ft.Control,
     padding = 16,
@@ -110,5 +124,3 @@ def glass_container(
         on_click=on_click,
         animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT) if on_click else None,
     )
-
-

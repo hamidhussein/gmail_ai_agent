@@ -8,6 +8,7 @@ from resources.styles.theme import (
     COLORS,
     border_all,
     padding_all,
+    safe_update,
 )
 from app.config import config_manager
 from authentication.credential_manager import credential_manager
@@ -28,16 +29,16 @@ class SettingsView(ft.Container):
         self.ai_mode_dropdown = ft.Dropdown(
             value=config_manager.config.ai_mode,
             options=[
-                ft.dropdown.Option("HYBRID"),
-                ft.dropdown.Option("LOCAL_ONLY"),
-                ft.dropdown.Option("CLOUD_ONLY"),
-                ft.dropdown.Option("HEURISTIC"),
+                ft.DropdownOption("HYBRID"),
+                ft.DropdownOption("LOCAL_ONLY"),
+                ft.DropdownOption("CLOUD_ONLY"),
+                ft.DropdownOption("HEURISTIC"),
             ],
             width=200,
             border_color=COLORS["border"],
             bgcolor=COLORS["bg_card"],
             focused_border_color=COLORS["primary"],
-            on_change=self._on_ai_mode_change,
+            on_select=self._on_ai_mode_change,
         )
 
         self.ollama_url_field = ft.TextField(
@@ -61,7 +62,7 @@ class SettingsView(ft.Container):
         )
 
         self.openai_key_field = ft.TextField(
-            value=credential_manager.get_openai_key() or "",
+            value=config_manager.get_openai_api_key() or "",
             label="OpenAI API Key (Optional)",
             password=True,
             can_reveal_password=True,
@@ -80,12 +81,12 @@ class SettingsView(ft.Container):
             min=50,
             max=95,
             divisions=9,
-            value=int(config_manager.config.min_confidence_auto_action * 100),
+            value=int(config_manager.config.hybrid_confidence_threshold * 100),
             label="{value}%",
             active_color=COLORS["primary"],
             on_change=self._on_confidence_change,
         )
-        self.confidence_val_text = ft.Text(f"{int(config_manager.config.min_confidence_auto_action * 100)}%", size=14, weight=ft.FontWeight.BOLD, color=COLORS["primary"])
+        self.confidence_val_text = ft.Text(f"{int(config_manager.config.hybrid_confidence_threshold * 100)}%", size=14, weight=ft.FontWeight.BOLD, color=COLORS["primary"])
 
         # Section 4: User Profile
         self.user_name_field = ft.TextField(
@@ -98,9 +99,9 @@ class SettingsView(ft.Container):
             content_padding=10,
         )
 
-        self.user_role_field = ft.TextField(
-            value=user_profile_manager.profile.role or "Executive",
-            label="Primary Role / Title",
+        self.user_company_field = ft.TextField(
+            value=user_profile_manager.profile.company_name or "",
+            label="Organization / Company",
             border_color=COLORS["border"],
             bgcolor=COLORS["bg_card"],
             focused_border_color=COLORS["primary"],
@@ -174,7 +175,7 @@ class SettingsView(ft.Container):
                     controls=[
                         ft.Row([
                             self.user_name_field,
-                            self.user_role_field,
+                            self.user_company_field,
                             ft.ElevatedButton("Save Profile", icon=ft.Icons.SAVE, bgcolor=COLORS["success"], color=COLORS["text_primary"], on_click=lambda e: self._save_profile()),
                         ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
                     ],
@@ -212,8 +213,7 @@ class SettingsView(ft.Container):
             self.account_status_text.value = "No active Gmail account connected (Demo Mode active)"
             self.account_status_text.color = COLORS["warning"]
 
-        if self.page:
-            self.page.update()
+        safe_update(self.page_ref)
 
     def _section_card(self, title: str, subtitle: str, controls: list) -> ft.Container:
         return ft.Container(
@@ -230,63 +230,83 @@ class SettingsView(ft.Container):
         )
 
     def _on_ai_mode_change(self, e):
-        config_manager.update(ai_mode=self.ai_mode_dropdown.value)
-        if self.page:
-            self.page.open(ft.SnackBar(ft.Text(f"AI Mode set to {self.ai_mode_dropdown.value}"), bgcolor=COLORS["success"]))
+        config_manager.config.ai_mode = self.ai_mode_dropdown.value
+        config_manager.save()
+        try:
+            self.page_ref.open(ft.SnackBar(ft.Text(f"AI Mode set to {self.ai_mode_dropdown.value}"), bgcolor=COLORS["success"]))
+        except Exception:
+            pass
 
     def _test_ollama(self):
         url = self.ollama_url_field.value.strip()
         model = self.ollama_model_field.value.strip()
-        config_manager.update(ollama_url=url, ollama_model=model)
+        config_manager.config.ollama_url = url
+        config_manager.config.ollama_model = model
+        config_manager.save()
 
         client = LocalOllamaClient(base_url=url, model=model)
         if client.is_available():
-            if self.page:
-                self.page.open(ft.SnackBar(ft.Text("Ollama connection successful! Model ready."), bgcolor=COLORS["success"]))
+            try:
+                self.page_ref.open(ft.SnackBar(ft.Text("Ollama connection successful! Model ready."), bgcolor=COLORS["success"]))
+            except Exception:
+                pass
         else:
-            if self.page:
-                self.page.open(ft.SnackBar(ft.Text(f"Could not connect to Ollama at {url}"), bgcolor=COLORS["danger"]))
+            try:
+                self.page_ref.open(ft.SnackBar(ft.Text(f"Could not connect to Ollama at {url}"), bgcolor=COLORS["danger"]))
+            except Exception:
+                pass
 
     def _save_openai_key(self):
         key = self.openai_key_field.value.strip()
+        config_manager.set_openai_api_key(key)
         if key:
-            credential_manager.save_openai_key(key)
-            if self.page:
-                self.page.open(ft.SnackBar(ft.Text("OpenAI API key saved encrypted!"), bgcolor=COLORS["success"]))
+            try:
+                self.page_ref.open(ft.SnackBar(ft.Text("OpenAI API key saved encrypted!"), bgcolor=COLORS["success"]))
+            except Exception:
+                pass
         else:
-            credential_manager.delete_openai_key()
-            if self.page:
-                self.page.open(ft.SnackBar(ft.Text("OpenAI key cleared"), bgcolor=COLORS["text_secondary"]))
+            try:
+                self.page_ref.open(ft.SnackBar(ft.Text("OpenAI key cleared"), bgcolor=COLORS["text_secondary"]))
+            except Exception:
+                pass
 
     def _reauth_gmail(self):
-        if self.page:
-            self.page.open(ft.SnackBar(ft.Text("Opening browser for OAuth login..."), bgcolor=COLORS["primary"]))
+        try:
+            self.page_ref.open(ft.SnackBar(ft.Text("Opening browser for OAuth login..."), bgcolor=COLORS["primary"]))
+        except Exception:
+            pass
         try:
             oauth_manager.start_auth_flow()
             self.refresh_data()
         except Exception as e:
-            if self.page:
-                self.page.open(ft.SnackBar(ft.Text(f"OAuth failed: {e}"), bgcolor=COLORS["danger"]))
+            try:
+                self.page_ref.open(ft.SnackBar(ft.Text(f"OAuth failed: {e}"), bgcolor=COLORS["danger"]))
+            except Exception:
+                pass
 
     def _disconnect_gmail(self):
         repository.disconnect_all_accounts()
         self.refresh_data()
-        if self.page:
-            self.page.open(ft.SnackBar(ft.Text("Gmail account disconnected"), bgcolor=COLORS["warning"]))
+        try:
+            self.page_ref.open(ft.SnackBar(ft.Text("Gmail account disconnected"), bgcolor=COLORS["warning"]))
+        except Exception:
+            pass
 
     def _on_confidence_change(self, e):
         val = float(e.control.value) / 100.0
         self.confidence_val_text.value = f"{int(e.control.value)}%"
-        config_manager.update(min_confidence_auto_action=val)
-        if self.page:
-            self.confidence_val_text.update()
+        config_manager.config.hybrid_confidence_threshold = val
+        config_manager.save()
+        safe_update(self.confidence_val_text)
 
     def _save_profile(self):
         name = self.user_name_field.value.strip()
-        role = self.user_role_field.value.strip()
-        user_profile_manager.update_profile(name=name, role=role)
-        if self.page:
-            self.page.open(ft.SnackBar(ft.Text("User profile saved!"), bgcolor=COLORS["success"]))
+        company = self.user_company_field.value.strip()
+        user_profile_manager.update_profile(name=name, company_name=company)
+        try:
+            self.page_ref.open(ft.SnackBar(ft.Text("User profile saved!"), bgcolor=COLORS["success"]))
+        except Exception:
+            pass
 
     def _export_backup(self):
         try:
@@ -295,13 +315,19 @@ class SettingsView(ft.Container):
             with zipfile.ZipFile(backup_path, 'w') as zipf:
                 zipf.write(config_manager.db_path, arcname="gmailai.db")
                 zipf.write(config_manager.config_file, arcname="config.json")
-            if self.page:
-                self.page.open(ft.SnackBar(ft.Text(f"Backup exported: {backup_path}"), bgcolor=COLORS["success"]))
+            try:
+                self.page_ref.open(ft.SnackBar(ft.Text(f"Backup exported: {backup_path}"), bgcolor=COLORS["success"]))
+            except Exception:
+                pass
         except Exception as e:
-            if self.page:
-                self.page.open(ft.SnackBar(ft.Text(f"Backup failed: {e}"), bgcolor=COLORS["danger"]))
+            try:
+                self.page_ref.open(ft.SnackBar(ft.Text(f"Backup failed: {e}"), bgcolor=COLORS["danger"]))
+            except Exception:
+                pass
 
     def _seed_demo(self):
         seed_demo_data()
-        if self.page:
-            self.page.open(ft.SnackBar(ft.Text("Sample demo dataset refreshed!"), bgcolor=COLORS["success"]))
+        try:
+            self.page_ref.open(ft.SnackBar(ft.Text("Sample demo dataset refreshed!"), bgcolor=COLORS["success"]))
+        except Exception:
+            pass
