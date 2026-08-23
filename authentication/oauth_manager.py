@@ -105,9 +105,30 @@ class OAuthManager:
                 break
         return success
 
+    def start_oauth_flow_async(self, on_success=None, on_error=None, credentials_path: Optional[str] = None) -> None:
+        """Runs the OAuth authorization flow in a background thread to prevent UI freezing."""
+        import threading
+
+        def _worker():
+            try:
+                email = self.start_oauth_flow(credentials_path)
+                if email:
+                    from core.events import event_bus, EVT_ACCOUNT_CHANGED
+                    event_bus.publish(EVT_ACCOUNT_CHANGED, email)
+                    if on_success:
+                        on_success(email)
+            except Exception as e:
+                logger.error(f"Async OAuth failed: {e}")
+                if on_error:
+                    on_error(str(e))
+
+        thread = threading.Thread(target=_worker, daemon=True)
+        thread.start()
+
     def start_auth_flow(self, credentials_path: Optional[str] = None) -> Optional[str]:
         """Alias for start_oauth_flow for backward compatibility."""
         return self.start_oauth_flow(credentials_path)
 
 
 oauth_manager = OAuthManager()
+

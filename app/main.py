@@ -8,7 +8,13 @@ from typing import Dict, Any
 
 from app.config import config_manager
 from core.logger import setup_logger
-from core.events import event_bus, EVT_SYNC_COMPLETED, EVT_TOAST_MESSAGE, EVT_THEME_CHANGED
+from core.events import (
+    event_bus,
+    EVT_SYNC_COMPLETED,
+    EVT_TOAST_MESSAGE,
+    EVT_THEME_CHANGED,
+    EVT_ACCOUNT_CHANGED,
+)
 from database.repository import repository
 from database.migrations import seed_demo_data
 from automation.scheduler import scheduler
@@ -28,6 +34,7 @@ from ui.review_screen import ReviewScreenView
 from ui.digests_view import DailyDigestsView
 from ui.audit_view import AuditLogsView
 from ui.settings import SettingsView
+from ui.components.google_auth_modal import GoogleAuthDialog
 
 logger = logging.getLogger("GmailAI.Main")
 
@@ -129,19 +136,23 @@ class GmailAIApp:
             on_click=lambda e: self.toggle_theme(),
         )
 
-        # User Status Footer Pill
+        # User Status Footer Pill / Google Sign In Prompt
         self.user_email_text = ft.Text("Demo Account", size=12, color=COLORS["text_secondary"], no_wrap=True)
         self.online_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor=COLORS["success"])
 
-        user_footer = ft.Container(
+        self.user_footer = ft.Container(
             content=ft.Row([
                 self.online_dot,
                 self.user_email_text,
+                ft.Container(expand=True),
+                ft.Icon(ft.Icons.OPEN_IN_NEW, size=14, color=COLORS["text_muted"]),
             ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            padding=padding_symmetric(horizontal=14, vertical=10),
+            padding=padding_symmetric(horizontal=12, vertical=10),
             bgcolor=COLORS["bg_card"],
             border=border_all(1, COLORS["border"]),
             border_radius=10,
+            tooltip="Click to manage or switch Google account",
+            on_click=lambda e: self.open_google_auth_dialog(),
         )
 
         # Sidebar Container
@@ -178,7 +189,7 @@ class GmailAIApp:
                 ft.Container(height=8),
 
                 # Bottom Account Footer
-                user_footer,
+                self.user_footer,
             ], spacing=0, expand=True),
         )
 
@@ -211,6 +222,14 @@ class GmailAIApp:
             animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
         )
         return container
+
+    def open_google_auth_dialog(self) -> None:
+        """Opens the 1-click Google Sign-In dialog modal."""
+        dialog = GoogleAuthDialog(page=self.page, on_authenticated=self._on_account_changed)
+        try:
+            self.page.open(dialog)
+        except Exception:
+            pass
 
     def toggle_theme(self) -> None:
         """Switches between Light and Dark mode with live theme token updates."""
@@ -291,13 +310,26 @@ class GmailAIApp:
             self.user_email_text.value = account.email
             self.online_dot.bgcolor = COLORS["success"]
         else:
-            self.user_email_text.value = "Demo Mode"
+            self.user_email_text.value = "Demo Mode (Sign In)"
             self.online_dot.bgcolor = COLORS["warning"]
 
     def _register_events(self) -> None:
         event_bus.subscribe(EVT_SYNC_COMPLETED, lambda data: self._on_sync_event(data))
         event_bus.subscribe(EVT_TOAST_MESSAGE, lambda msg: self._show_toast(str(msg)))
         event_bus.subscribe(EVT_THEME_CHANGED, lambda theme: self._on_theme_event(theme))
+        event_bus.subscribe(EVT_ACCOUNT_CHANGED, lambda email: self._on_account_changed(email))
+
+    def _on_account_changed(self, email: str) -> None:
+        """Called when a user signs in with Google."""
+        logger.info(f"Active account changed to {email}. Refreshing views...")
+        self.views.clear()
+        self._update_badges()
+        self.show_view(self.current_tab)
+        # Trigger immediate background sync
+        try:
+            scheduler.trigger_sync_now()
+        except Exception:
+            pass
 
     def _on_theme_event(self, new_theme: str) -> None:
         is_light = (new_theme == "light")
