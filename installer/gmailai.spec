@@ -9,24 +9,34 @@ added_files = [
     ('../resources', 'resources'),
 ]
 
-# Collect customtkinter json assets and fonts
+# Collect Flet runtime assets and modules
 try:
-    added_files += collect_data_files('customtkinter')
+    added_files += collect_data_files('flet')
 except Exception:
     pass
 
 hidden_imports = [
-    'customtkinter',
+    'flet',
     'sqlalchemy',
     'sqlalchemy.sql.default_comparator',
     'sqlalchemy.ext.baked',
     'cryptography',
     'googleapiclient',
+    'googleapiclient.discovery',
     'google_auth_oauthlib',
+    'google_auth_oauthlib.flow',
     'google.auth',
+    'google.auth.transport.requests',
     'openai',
     'pydantic',
+    'requests',
+    'dotenv',
 ]
+
+try:
+    hidden_imports += collect_submodules('flet')
+except Exception:
+    pass
 
 a = Analysis(
     ['../run.py'],
@@ -37,7 +47,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['customtkinter'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,

@@ -1,12 +1,13 @@
-# GmailAI Assistant — Commercial Desktop AI Email Management Platform
+# GmailAI Assistant — Commercial AI Desktop Email Platform
 
 <div align="center">
 
-![GmailAI Header](https://img.shields.io/badge/GmailAI-Production%20Ready-6366F1?style=for-the-badge)
-![Python 3.12+](https://img.shields.io/badge/Python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![UI](https://img.shields.io/badge/Desktop%20UI-CustomTkinter-blueviolet?style=for-the-badge)
-![Security](https://img.shields.io/badge/Security-AES%20%2B%20OAuth%202.0-emerald?style=for-the-badge)
-![AI Stack](https://img.shields.io/badge/Hybrid%20AI-Ollama%20%2B%20OpenAI-orange?style=for-the-badge)
+![GmailAI Status](https://img.shields.io/badge/GmailAI-v1.0.0%20Release-6366F1?style=for-the-badge)
+![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![UI](https://img.shields.io/badge/UI-Flet%20(Flutter%20Engine)-02569B?style=for-the-badge&logo=flutter)
+![Security](https://img.shields.io/badge/Security-AES%20%2B%20OAuth%202.0-10B981?style=for-the-badge)
+![AI Stack](https://img.shields.io/badge/Hybrid%20AI-Ollama%20%2B%20OpenAI-F59E0B?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
 **Privacy-First Hybrid AI Email Assistant for Windows**
 
@@ -16,219 +17,155 @@
 
 ## 🌟 Executive Overview
 
-**GmailAI Assistant** is a commercial-grade Windows desktop application built to safely analyze, organize, triage, and draft responses for Gmail accounts. It combines an **on-device Local AI Engine (Ollama)** with a **Cloud AI Engine (OpenAI)** and a **Safety Verification Policy Guardrail** that prevents automated destruction of sensitive emails.
+**GmailAI Assistant** is a commercial-grade desktop application that triages, analyzes, and drafts intelligent responses for your Gmail inbox. It combines an **on-device Local AI Engine (Ollama)** with a **Cloud AI Engine (OpenAI)** and a **Heuristic Rule Engine** with strict safety guardrails.
 
-### 🔑 Key Capabilities
-- **📥 Inbox Intelligence Engine**: Multi-category classification across 11 standard enterprise categories (`CLIENT`, `WORK`, `BANK`, `FINANCE`, `LEGAL`, `NEWSLETTER`, `PROMOTION`, `SOCIAL`, `ADVERTISEMENT`, `SPAM`, `PERSONAL`).
+### 🔑 Key Features
+
+- **⚡ 1-Click Google Sign-In**: Authenticate securely in your default browser and auto-sync with zero configuration.
+- **📥 Intelligence Inbox**: Automatic multi-category classification across 11 standard enterprise categories (`CLIENT`, `WORK`, `BANK`, `FINANCE`, `LEGAL`, `NEWSLETTER`, `PROMOTION`, `SOCIAL`, `ADVERTISEMENT`, `SPAM`, `PERSONAL`).
 - **🧠 Hybrid AI Router**:
-  - Automatically queries **Local AI (Ollama)** for low latency & complete data privacy.
-  - If confidence is $< 85\%$ or Local AI is offline, seamlessly escalates to **Cloud AI (OpenAI GPT-4o-mini)**.
-  - Features a resilient **Heuristic Rule Engine** fallback to ensure $100\%$ zero-crash uptime.
-- **🛡️ Strict Safety Guardrails**: Permanent deletion and trashing are **never automatic** and require double user verification. Sensitive categories (Banking, Legal, Government, Work VIPs) cannot be modified without authorization.
-- **🧹 Smart Cleanup Review Screen**: Batch review and approve suggestions to archive old newsletters and marketing spam in 1-click.
-- **💬 Executive Reply Assistant**: Drafts replies in 6 distinct tones (*Professional, Friendly, Short, Detailed, Apology, Follow-up*) and saves directly into your Gmail drafts.
-- **📋 Daily AI Morning Briefing**: Summarizes incoming trends, VIP requests, and pending deadlines into an executive markdown briefing.
-- **💾 Local SQLite Database with Encryption**: AES-encrypted token storage, machine-salted keys, and 1-click disaster recovery backup (`gmailai_backup.zip`).
+  - Queries **Local AI (Ollama)** for zero latency & complete on-device privacy.
+  - If confidence is $< 85\%$ or Ollama is offline, gracefully routes to **Cloud AI (OpenAI GPT-4o-mini)**.
+  - Falls back to a deterministic **Heuristic Rule Engine** with 40+ domain maps for $100\%$ zero-crash reliability.
+- **🎨 Light & Dark Themes**: Choose between Clean Slate Light Mode (Default) and Obsidian Midnight Dark Mode (`#060913`).
+- **🧹 Smart Cleanup**: Batch-review and approve cleanup recommendations to archive newsletters and promotional spam in 1 click.
+- **💬 AI Reply Assistant**: Context-aware drafting in 6 distinct tones (*Professional, Friendly, Short, Detailed, Apology, Follow-up*) with automatic Gmail draft synchronization.
+- **📋 Daily Briefings**: Executive summaries, pending deadlines, and VIP requests aggregated into daily briefings.
+- **🛡️ Privacy & Safety Guardrails**: Sensitive categories (Banking, Legal, Work VIPs) are protected from accidental modifications. Trashing and permanent deletions require explicit user confirmation.
+- **💾 Local Encrypted Storage**: SQLite database with machine-salted AES encryption for tokens and 1-click encrypted backup export.
 
 ---
 
-## 🏗️ Architecture Overview
+## 🚀 Quickstart
 
-```
-                          USER
-                           |
-                           v
-               Desktop UI (CustomTkinter)
-                           |
-             -----------------------------
-             |                           |
-             v                           v
-     Gmail OAuth 2.0             Hybrid AI Router
-     (Encrypted Tokens)                  |
-             |             -----------------------------
-             v             |                           |
-         Gmail API         v                           v
-             |        Local AI Engine           Cloud AI Engine
-             |         (Ollama Local)            (OpenAI API)
-             v             |                           |
-   Email Parsing Engine    -----------------------------
-             |                           |
-             -----------------------------
-                           |
-                           v
-                Decision & Safety Engine
-                (Mandatory User Approvals)
-                           |
-                           v
-                Action & Draft Executor
+### Prerequisites
+- Python **3.10+** (Python 3.12 recommended)
+- (Optional) [Ollama](https://ollama.com/) running locally with `qwen2.5:latest` or `llama3.1:latest`
+- (Optional) OpenAI API Key for cloud fallback
+
+### Installation
+
+```powershell
+# 1. Clone the repository
+git clone https://github.com/hamidhussein/gmail_ai_agent.git
+cd gmail_ai_agent
+
+# 2. Create virtual environment
+python -m venv venv
+.\venv\Scripts\activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Launch the application
+python run.py
 ```
 
 ---
 
-## 📁 Repository Structure
+## 🔐 Google Cloud OAuth 2.0 Setup Guide
+
+To connect your real Gmail account with Google's official OAuth 2.0 flow:
+
+1. **Create a Google Cloud Project**:
+   - Go to [Google Cloud Console](https://console.cloud.google.com/projectcreate) and create a new project (e.g. `Gmail AI Assistant`).
+
+2. **Enable Gmail API**:
+   - In your project, go to **APIs & Services** → **Library**, search for **Gmail API**, and click **Enable**.
+
+3. **Configure OAuth Consent Screen**:
+   - Go to **APIs & Services** → **OAuth consent screen**.
+   - Select **External**, fill in the App name (`GmailAI`) and your email address.
+   - **Important**: Under **Test users**, click **`+ ADD USERS`** and add your Gmail address (e.g., `youremail@gmail.com`).
+
+4. **Create OAuth Client ID**:
+   - Go to **APIs & Services** → **Credentials** → **Create Credentials** → **OAuth Client ID**.
+   - Choose **Desktop app** as the Application type, name it `GmailAI`, and click **Create**.
+   - Click **Download JSON** (⬇).
+
+5. **Connect in App**:
+   - In GmailAI, go to **Settings & AI** → **Step 5: Paste credentials.json content**, paste the JSON, and click **Save Credentials & Connect Gmail**!
+
+> [!TIP]
+> **Google Verification Warning**: When testing your app, Google may display *"Google hasn't verified this app"*. Click **Advanced** → **Go to Gmail AI Assistant (unsafe)** → **Continue** to grant permissions.
+
+---
+
+## 📦 Building Standalone Windows Executable (.exe)
+
+Compile the entire application into a standalone Windows `.exe` using PyInstaller:
+
+```powershell
+python installer/build_exe.py
+```
+
+The compiled standalone executable will be generated in the `dist/` directory:
+```
+dist/
+└── GmailAI Assistant/
+    └── GmailAI Assistant.exe
+```
+
+---
+
+## ⚙️ Configuration & Architecture
 
 ```
 gmail_ai_agent/
 ├── app/
-│   ├── main.py                  # CustomTkinter GUI orchestrator & lifecycle
-│   ├── config.py                # Configuration & persistent settings
+│   ├── main.py                  # Flet application shell & navigation coordinator
+│   ├── config.py                # Persistent user configuration
 │   └── constants.py             # Enums: Categories, ActionTypes, Risk, Tones
 ├── core/
-│   ├── logger.py                # Rotating structured file & audit logger
+│   ├── logger.py                # Rotating structured audit logger
 │   ├── security.py              # Cryptography (AES-GCM/Fernet) & Safety policies
-│   ├── exceptions.py            # Custom exception classes
-│   └── events.py                # Thread-safe event bus
+│   ├── exceptions.py            # Typed domain exceptions
+│   └── events.py                # Thread-safe bidirectional event bus
 ├── authentication/
-│   ├── oauth_manager.py         # Google OAuth 2.0 flow & token refresh
-│   ├── token_manager.py         # Encrypted on-disk token persistence
-│   └── credential_manager.py    # Google Cloud credentials validator
+│   ├── oauth_manager.py         # Google OAuth 2.0 background threaded flow
+│   ├── token_manager.py         # Encrypted token persistence
+│   └── credential_manager.py    # Google Cloud credentials parser & validator
 ├── gmail/
-│   ├── client.py                # Gmail API client wrapper & retry backoff
+│   ├── client.py                # Gmail API client with retry backoff
 │   ├── reader.py                # Batch message synchronizer & fetcher
-│   ├── parser.py                # Multi-part MIME decoding & HTML stripper
-│   ├── actions.py               # Safe Gmail modification & draft executor
-│   └── labels.py                # Gmail label synchronizer
+│   ├── parser.py                # Multi-part MIME decoding & HTML entity sanitizer
+│   └── actions.py               # Safe Gmail modifications & draft creator
 ├── ai/
-│   ├── router.py                # Hybrid AI Router (>85% local -> local decision)
-│   ├── local_model.py           # Ollama REST client (Qwen 2.5, Llama 3.1)
-│   ├── cloud_model.py           # OpenAI API client (GPT-4o, GPT-4o-mini)
-│   ├── classifier.py            # 11-category classifier & heuristic engine
+│   ├── router.py                # Hybrid AI Router (Local -> Cloud -> Heuristic)
+│   ├── local_model.py           # Fast-offline Ollama REST client
+│   ├── cloud_model.py           # OpenAI API client
+│   ├── classifier.py            # 11-category classifier & 40+ domain heuristic engine
 │   ├── summarizer.py            # Email & thread summarizer
-│   ├── reply_generator.py       # Context-aware 6-tone reply assistant
-│   └── confidence.py            # Uncertainty & confidence calculator
-├── memory/
-│   ├── user_profile.py          # User preferences & signature settings
-│   ├── preference_engine.py     # Sender importance & VIP scoring
-│   └── learning.py              # Feedback loop learning from user approvals
+│   └── reply_generator.py       # Context-aware 6-tone reply assistant
 ├── database/
 │   ├── models.py                # SQLAlchemy ORM models
-│   ├── repository.py            # Thread-safe query & CRUD operations
-│   └── migrations.py            # Database initialization & demo seeder
-├── automation/
-│   ├── scheduler.py             # Background daemon thread scheduler
-│   ├── daily_digest.py          # Daily executive briefing compiler
-│   └── reminders.py             # Deadline & follow-up detector
+│   ├── repository.py            # Thread-safe database repository
+│   └── migrations.py            # Auto-migrations & demo dataset seeder
 ├── ui/
-│   ├── dashboard.py             # Main dashboard: metrics, health, AI status
-│   ├── inbox_view.py            # Inbox explorer with split-detail drawer
-│   ├── review_screen.py         # Safe cleanup batch review screen
-│   ├── digests_view.py          # Historical daily briefings browser
-│   ├── audit_view.py            # Action audit trail viewer
-│   ├── settings.py              # AI model, OAuth, safety, backup controls
+│   ├── dashboard.py             # Executive overview & real-time metrics
+│   ├── inbox_view.py            # Intelligence Inbox with Markdown reader & avatars
+│   ├── review_screen.py         # Smart cleanup batch review screen
+│   ├── digests_view.py          # Daily executive morning briefings
+│   ├── audit_view.py            # Complete security & action audit logs
+│   ├── settings.py              # Settings, AI model switcher, & OAuth wizard
 │   └── components/
-│       ├── navigation.py        # Modern sidebar with active badges
-│       ├── stat_card.py         # Glassmorphic KPI metric widget
-│       ├── email_card.py        # Interactive email row card
-│       ├── action_dialog.py     # Double-confirmation safety dialog
-│       ├── reply_modal.py       # AI reply composer modal
-│       └── toast.py             # Non-blocking floating notifications
-├── installer/
-│   ├── build_exe.py             # PyInstaller automated packaging script
-│   ├── gmailai.spec             # Spec file for standalone binary
-│   └── inno_setup.iss           # Windows Setup Installer script
-├── tests/                       # Automated pytest test suite (18 tests)
-├── run.py                       # Top-level application runner
-├── requirements.txt             # Python dependencies
-├── README.md                    # Documentation
-└── LICENSE                      # MIT License
+│       ├── google_auth_modal.py # 1-Click Google Sign-In dialog
+│       ├── reply_modal.py       # AI Reply assistant modal
+│       └── stat_card.py         # Glassmorphic statistic cards
+└── run.py                       # Modern Flet application runner
 ```
 
 ---
 
-## 🚀 Getting Started
+## 🛡️ Security & Privacy Architecture
 
-### 1. Prerequisites
-- **Python 3.12+**
-- (Optional for Local AI): **[Ollama](https://ollama.com/)** installed and running (`ollama run qwen2.5` or `ollama run llama3.1`)
-- (Optional for Live Gmail): Google Cloud OAuth 2.0 `credentials.json` (Desktop app type)
-
-### 2. Installation
-Clone the repository and install requirements:
-```bash
-git clone https://github.com/gmailai/assistant.git
-cd gmail_ai_agent
-python -m pip install -r requirements.txt
-```
-
-### 3. Run the Application
-Launch the desktop application:
-```bash
-python run.py
-```
-
-> **Demo Mode Available Out-of-the-Box**:
-> When first launched, GmailAI Assistant automatically seeds realistic demo emails across multiple categories (Banking, Legal NDA, Client Quotations, Newsletters, Spam) so you can immediately experience the UI, AI classification, Reply Assistant, and Safety features without needing an active Google Cloud project.
-
----
-
-## ⚙️ Configuration & Setup
-
-### Setting Up Live Gmail OAuth
-1. Open Google Cloud Console: [console.cloud.google.com](https://console.cloud.google.com/)
-2. Create a project and enable the **Gmail API**.
-3. Configure the OAuth Consent Screen and create an **OAuth 2.0 Client ID** (Application Type: *Desktop App*).
-4. Download the `credentials.json` file.
-5. In GmailAI Assistant, go to **⚙️ Settings > Gmail Authentication**, click **📁 Browse File...**, select your `credentials.json`, and click **🔑 Google Login**.
-
-### Setting Up Local AI (Ollama)
-1. Install Ollama from [ollama.com](https://ollama.com).
-2. Pull your model of choice:
-   ```bash
-   ollama pull qwen2.5:latest
-   ```
-3. In GmailAI Assistant under **⚙️ Settings > Hybrid AI Router**, confirm the URL is `http://localhost:11434` and click **⚡ Test Local AI**.
-
-### Setting Up Cloud AI (OpenAI)
-1. In **⚙️ Settings > Hybrid AI Router**, paste your `sk-...` API key into the OpenAI Key field.
-2. Select your model (`gpt-4o-mini` or `gpt-4o`) and click **☁️ Save & Test Cloud**.
-3. All API keys are securely AES-encrypted before being stored on disk.
-
----
-
-## 🧪 Testing
-
-Run the comprehensive automated unit and integration test suite:
-```bash
-python -m pytest tests/ -v
-```
-
-Tests cover:
-- Cryptographic token encryption & machine-tied key derivation
-- SQLite SQLAlchemy CRUD transactions & aggregations
-- Multi-part MIME decoding and HTML entity conversion
-- Hybrid AI Router confidence threshold escalation
-- Rule-based Heuristic Engine & Phishing detection
-- Safety policies, protected domains, and double-confirmation checks
-- Preference memory engine and sender VIP weighting
-
----
-
-## 📦 Packaging for Windows
-
-### Build Standalone Executable (.exe)
-```bash
-python installer/build_exe.py
-```
-The compiled single-file standalone executable will be generated at:
-```
-dist/GmailAI Assistant.exe
-```
-
-### Build Windows Installer (.msi / setup.exe)
-Open `installer/inno_setup.iss` in **Inno Setup** and click **Compile** to generate `GmailAI_Setup_v1.0.0.exe`.
-
----
-
-## 🛡️ Production Security Checklist
-
-- [x] **OAuth 2.0 Standard**: No user passwords ever touched or stored.
-- [x] **AES Token Encryption**: All OAuth refresh tokens and API keys are stored in AES-encrypted binary files.
-- [x] **Local-First Privacy**: Sensitive emails can be classified entirely locally using Ollama on the user's computer.
-- [x] **Safety Guardrails**: Hard deletion requires double confirmation; protected institutions (Banking, Legal, Medical) cannot be auto-archived.
-- [x] **Audit Trail**: Every action taken is logged immutably in `ActionAuditLog` with timestamps and authorization rationale.
-- [x] **1-Click Backup**: Easy disaster recovery export (`gmailai_backup.zip`) and restore.
+1. **Zero Data Telemetry**: Your emails never leave your machine unless you explicitly enable Cloud AI.
+2. **Encrypted Token Vault**: OAuth tokens are salted and encrypted on disk using machine-level AES-256 keys.
+3. **Double Verification Policy**: Trashing and deletion actions are never automated.
+4. **Offline First**: Runs completely offline using local Ollama models or heuristic classification when no internet connection is available.
 
 ---
 
 ## 📄 License
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+
+This project is licensed under the [MIT License](LICENSE).
