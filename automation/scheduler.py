@@ -2,6 +2,7 @@
 GmailAI Assistant - Background Task Scheduler
 """
 import time
+import json
 import threading
 import datetime
 import logging
@@ -30,6 +31,7 @@ class BackgroundScheduler:
         self._stop_event = threading.Event()
         self._last_digest_date: Optional[str] = None
         self._is_syncing = False
+        self._sync_lock = threading.Lock()
 
     def start(self) -> None:
         """Starts background scheduler thread."""
@@ -82,7 +84,7 @@ class BackgroundScheduler:
 
     def _execute_sync_task(self, on_complete: Optional[Callable[[], None]] = None) -> None:
         """Performs email fetch, hybrid AI analysis, and suggestion creation."""
-        if self._is_syncing:
+        if not self._sync_lock.acquire(blocking=False):
             logger.debug("Sync already in progress, skipping.")
             return
 
@@ -102,8 +104,11 @@ class BackgroundScheduler:
             try:
                 raw_emails = reader.fetch_and_parse_inbox(account_id=account.id, max_count=max_emails)
             except Exception as e:
-                logger.warning(f"Could not fetch live Gmail emails ({e}). Running in offline/demo mode.")
-                raw_emails = []
+                if config_manager.config.demo_mode:
+                    logger.info(f"Demo mode sync skipped Gmail fetch ({e}).")
+                    raw_emails = []
+                else:
+                    raise
 
             for email_dict in raw_emails:
                 # Run through Hybrid AI Router (output is already validated)
@@ -127,7 +132,7 @@ class BackgroundScheduler:
                 email_dict["ai_confidence"] = classification.get("confidence", 0.8)
                 email_dict["ai_reasoning"] = classification.get("reasoning", "")
                 email_dict["suggested_action"] = classification.get("suggested_action", "KEEP")
-                email_dict["action_items_json"] = str(classification.get("action_items", []))
+                email_dict["action_items_json"] = json.dumps(classification.get("action_items", []))
 
                 # Save email to DB
                 saved = repository.save_or_update_email(email_dict)
@@ -153,6 +158,7 @@ class BackgroundScheduler:
             event_bus.publish(EVT_SYNC_ERROR, str(e))
         finally:
             self._is_syncing = False
+            self._sync_lock.release()
             if on_complete:
                 try:
                     on_complete()

@@ -87,3 +87,9 @@ def test_cleanup_suggestions(test_repo):
     pending = test_repo.get_pending_suggestions()
     assert len(pending) == 1
     assert pending[0][0].id == sugg.id
+
+
+def test_deactivate_account_persists(test_repo):
+    test_repo.get_or_create_account("logout@test.com")
+    assert test_repo.deactivate_account("logout@test.com") is True
+    assert test_repo.get_active_account() is None

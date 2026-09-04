@@ -562,35 +562,45 @@ class InboxIntelligenceView(ft.Container):
 
         # Mark as read in repo & actions in-place
         if email.is_unread:
-            repository.update_email_flags(email.message_id, is_unread=False)
-            email.is_unread = False
-            data["is_unread"] = False
-            learning_engine.record_read(email.sender)
+            try:
+                gmail_actions.mark_as_read(
+                    email.message_id,
+                    sender=email.sender,
+                    subject=email.subject or "",
+                )
+                email.is_unread = False
+                data["is_unread"] = False
+                learning_engine.record_read(email.sender)
 
-            if new_id in self.unread_dot_refs:
-                dot = self.unread_dot_refs[new_id]
-                dot.bgcolor = "transparent"
-                safe_update(dot)
-            if new_id in self.subj_text_refs:
-                st = self.subj_text_refs[new_id]
-                st.weight = ft.FontWeight.NORMAL
-                st.color = COLORS["text_secondary"]
-                safe_update(st)
-            if new_id in self.sender_text_refs:
-                sndt = self.sender_text_refs[new_id]
-                sndt.weight = ft.FontWeight.W_500
-                safe_update(sndt)
+                if new_id in self.unread_dot_refs:
+                    dot = self.unread_dot_refs[new_id]
+                    dot.bgcolor = "transparent"
+                    safe_update(dot)
+                if new_id in self.subj_text_refs:
+                    st = self.subj_text_refs[new_id]
+                    st.weight = ft.FontWeight.NORMAL
+                    st.color = COLORS["text_secondary"]
+                    safe_update(st)
+                if new_id in self.sender_text_refs:
+                    sndt = self.sender_text_refs[new_id]
+                    sndt.weight = ft.FontWeight.W_500
+                    safe_update(sndt)
 
-            # Inform other views to update badge counts
-            event_bus.publish(EVT_SUGGESTION_ACTIONED, 1)
+                event_bus.publish(EVT_SUGGESTION_ACTIONED, 1)
+            except Exception as ex:
+                self._show_action_error("Mark as read", ex)
 
         self.selected_email = data
         self._render_email_detail(data)
 
     def _toggle_star_from_card(self, email: Any):
         new_starred = not getattr(email, "is_starred", False)
+        try:
+            gmail_actions.set_starred(email.message_id, new_starred)
+        except Exception as ex:
+            self._show_action_error("Update star", ex)
+            return
         email.is_starred = new_starred
-        repository.update_email_flags(email.message_id, is_starred=new_starred)
 
         # Update card button in place
         if email.id in self.star_btn_refs:
@@ -617,8 +627,12 @@ class InboxIntelligenceView(ft.Container):
 
     def _toggle_star_from_detail(self, data: Dict[str, Any]):
         new_starred = not data.get("is_starred", False)
+        try:
+            gmail_actions.set_starred(data["message_id"], new_starred)
+        except Exception as ex:
+            self._show_action_error("Update star", ex)
+            return
         data["is_starred"] = new_starred
-        repository.update_email_flags(data["message_id"], is_starred=new_starred)
 
         email_id = data.get("id")
         if email_id and email_id in self.star_btn_refs:
@@ -642,8 +656,17 @@ class InboxIntelligenceView(ft.Container):
 
     def _toggle_read_status(self, data: Dict[str, Any]):
         new_unread = not data.get("is_unread", False)
+        try:
+            gmail_actions.set_read_status(
+                data["message_id"],
+                new_unread,
+                sender=data.get("sender", ""),
+                subject=data.get("subject", ""),
+            )
+        except Exception as ex:
+            self._show_action_error("Update read status", ex)
+            return
         data["is_unread"] = new_unread
-        repository.update_email_flags(data["message_id"], is_unread=new_unread)
 
         email_id = data.get("id")
         if email_id and email_id in self.unread_dot_refs:
@@ -906,6 +929,36 @@ class InboxIntelligenceView(ft.Container):
                 pass
 
     def _trash_email(self, email_data: Dict[str, Any]) -> None:
+        subject = email_data.get("subject") or "(No Subject)"
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Move email to trash?"),
+            content=ft.Text(
+                f'Confirm moving "{subject[:80]}" to Gmail Trash. '
+                "This is the required second confirmation."
+            ),
+        )
+
+        def cancel(e):
+            self.page_ref.close(dialog)
+
+        def confirm(e):
+            self.page_ref.close(dialog)
+            self._execute_trash(email_data)
+
+        dialog.actions = [
+            ft.TextButton("Cancel", on_click=cancel),
+            ft.ElevatedButton(
+                "Move to Trash",
+                icon=ft.Icons.DELETE_OUTLINE,
+                bgcolor=COLORS["danger"],
+                color="#FFFFFF",
+                on_click=confirm,
+            ),
+        ]
+        self.page_ref.open(dialog)
+
+    def _execute_trash(self, email_data: Dict[str, Any]) -> None:
         try:
             gmail_actions.trash_message(
                 email_data["message_id"],
@@ -919,7 +972,12 @@ class InboxIntelligenceView(ft.Container):
             self.page_ref.open(ft.SnackBar(ft.Text("Email moved to trash"), bgcolor=COLORS["danger"]))
             self.load_emails()
         except Exception as e:
-            try:
-                self.page_ref.open(ft.SnackBar(ft.Text(f"Trash: {e}"), bgcolor=COLORS["warning"]))
-            except Exception:
-                pass
+            self._show_action_error("Move to trash", e)
+
+    def _show_action_error(self, action: str, error: Exception) -> None:
+        try:
+            self.page_ref.open(
+                ft.SnackBar(ft.Text(f"{action} failed: {error}"), bgcolor=COLORS["danger"])
+            )
+        except Exception:
+            pass

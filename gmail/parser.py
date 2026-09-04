@@ -7,6 +7,7 @@ import base64
 import email.utils
 import datetime
 import logging
+import json
 from typing import Dict, Any, List, Optional, Tuple
 
 logger = logging.getLogger("GmailAI.Parser")
@@ -198,8 +199,8 @@ class EmailParser:
             "is_starred": is_starred,
             "is_trash": is_trash,
             "is_archived": is_archived,
-            "labels_json": str(label_ids),
+            "labels_json": json.dumps(label_ids),
             "has_attachments": len(attachments) > 0,
-            "attachments_json": str(attachments),
+            "attachments_json": json.dumps(attachments),
             "is_newsletter_header": bool(list_unsubscribe),
         }

@@ -2,7 +2,7 @@
 GmailAI Assistant - Smart Cleanup Review Screen for Flet
 """
 import flet as ft
-from typing import List, Tuple
+from typing import Any, List, Tuple
 from resources.styles.theme import (
     COLORS,
     get_category_color,

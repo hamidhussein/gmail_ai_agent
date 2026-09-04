@@ -12,6 +12,7 @@ from core.security import safety_guard
 from core.exceptions import SafetyViolationError, GmailAPIError
 from database.repository import repository
 from app.constants import ActionType, EmailCategory
+from app.config import config_manager
 
 logger = logging.getLogger("GmailAI.Actions")
 
@@ -27,6 +28,17 @@ class GmailActions:
         if not service:
             raise GmailAPIError("Gmail service is not available.")
         return service
+
+    @staticmethod
+    def _handle_remote_failure(action_name: str, message_id: str, error: Exception) -> None:
+        """Allow local-only mutations exclusively when demo mode is explicit."""
+        if config_manager.config.demo_mode:
+            logger.info("Demo mode %s for %s (%s)", action_name, message_id, error)
+            return
+        logger.error("Gmail %s failed for %s: %s", action_name, message_id, error)
+        if isinstance(error, GmailAPIError):
+            raise error
+        raise GmailAPIError(f"Could not {action_name} Gmail message {message_id}: {error}") from error
 
     def archive(
         self,
@@ -54,7 +66,7 @@ class GmailActions:
             )
             GmailClientFactory.execute_with_retry(req)
         except Exception as e:
-            logger.info(f"Local/Demo mode archive for {message_id} (Gmail service not connected: {e})")
+            self._handle_remote_failure("archive", message_id, e)
 
         # Audit log & update local DB via proper session-managed method
         repository.log_action(
@@ -88,7 +100,7 @@ class GmailActions:
             )
             GmailClientFactory.execute_with_retry(req)
         except Exception as e:
-            logger.info(f"Local/Demo mode mark_as_read for {message_id} ({e})")
+            self._handle_remote_failure("mark as read", message_id, e)
 
         repository.log_action(
             action_type=ActionType.MARK_READ.value,
@@ -104,20 +116,57 @@ class GmailActions:
         logger.info(f"Marked message {message_id} as read.")
         return True
 
-    def star(self, message_id: str) -> bool:
-        """Adds STARRED label."""
+    def set_read_status(
+        self,
+        message_id: str,
+        is_unread: bool,
+        sender: str = "",
+        subject: str = "",
+        user_approved: bool = True,
+    ) -> bool:
+        """Sets Gmail and local read state consistently."""
+        if not is_unread:
+            return self.mark_as_read(message_id, sender, subject, user_approved)
+
         try:
             service = self._get_service()
             req = service.users().messages().modify(
                 userId="me",
                 id=message_id,
-                body={"addLabelIds": ["STARRED"]},
+                body={"addLabelIds": ["UNREAD"]},
             )
             GmailClientFactory.execute_with_retry(req)
         except Exception as e:
-            logger.info(f"Local/Demo mode star for {message_id} ({e})")
-        repository.update_email_flags(message_id, is_starred=True)
+            self._handle_remote_failure("mark as unread", message_id, e)
+
+        repository.log_action(
+            action_type="MARK_UNREAD",
+            email_message_id=message_id,
+            account_email=self.account_email,
+            subject=subject,
+            sender=sender,
+            reason="Marked as unread",
+            user_approved=user_approved,
+        )
+        repository.update_email_flags(message_id, is_unread=True)
         return True
+
+    def set_starred(self, message_id: str, is_starred: bool) -> bool:
+        """Sets Gmail and local starred state consistently."""
+        try:
+            service = self._get_service()
+            body = {"addLabelIds": ["STARRED"]} if is_starred else {"removeLabelIds": ["STARRED"]}
+            req = service.users().messages().modify(userId="me", id=message_id, body=body)
+            GmailClientFactory.execute_with_retry(req)
+        except Exception as e:
+            self._handle_remote_failure("star" if is_starred else "unstar", message_id, e)
+
+        repository.update_email_flags(message_id, is_starred=is_starred)
+        return True
+
+    def star(self, message_id: str) -> bool:
+        """Adds the STARRED label."""
+        return self.set_starred(message_id, True)
 
     def move_to_trash(
         self,
@@ -147,7 +196,7 @@ class GmailActions:
             req = service.users().messages().trash(userId="me", id=message_id)
             GmailClientFactory.execute_with_retry(req)
         except Exception as e:
-            logger.info(f"Local/Demo mode move_to_trash for {message_id} ({e})")
+            self._handle_remote_failure("move to trash", message_id, e)
 
         repository.log_action(
             action_type=ActionType.MOVE_TRASH.value,
@@ -187,8 +236,8 @@ class GmailActions:
         category: str = "SPAM",
         sender: str = "",
         subject: str = "",
-        user_approved: bool = True,
-        double_confirmed: bool = True,
+        user_approved: bool = False,
+        double_confirmed: bool = False,
     ) -> bool:
         """Convenience alias for move_to_trash()."""
         return self.move_to_trash(

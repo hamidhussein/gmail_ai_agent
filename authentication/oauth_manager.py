@@ -96,14 +96,10 @@ class OAuthManager:
             raise AuthenticationError(f"OAuth flow failed: {e}")
 
     def logout(self, email: str) -> bool:
-        """Deletes account credentials and sets active account to none or fallback."""
-        success = token_manager.delete_token(email)
-        accounts = repository.list_accounts()
-        for acc in accounts:
-            if acc.email == email:
-                acc.is_active = False
-                break
-        return success
+        """Deletes account credentials and persists account deactivation."""
+        token_deleted = token_manager.delete_token(email)
+        account_deactivated = repository.deactivate_account(email)
+        return token_deleted or account_deactivated
 
     def start_oauth_flow_async(self, on_success=None, on_error=None, credentials_path: Optional[str] = None) -> None:
         """Runs the OAuth authorization flow in a background thread to prevent UI freezing."""
@@ -131,4 +127,3 @@ class OAuthManager:
 
 
 oauth_manager = OAuthManager()
-

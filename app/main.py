@@ -66,6 +66,7 @@ class GmailAIApp:
 
         # Start scheduler
         scheduler.start()
+        page.on_disconnect = lambda e: scheduler.stop()
 
         # Build Sidebar Navigation & Main Container
         self._build_shell()
@@ -78,7 +79,7 @@ class GmailAIApp:
 
     def _init_data_if_needed(self) -> None:
         stats = repository.get_inbox_stats()
-        if stats["total_emails"] == 0:
+        if config_manager.config.demo_mode and stats["total_emails"] == 0:
             logger.info("Fresh database detected. Seeding sample demo data...")
             seed_demo_data()
 

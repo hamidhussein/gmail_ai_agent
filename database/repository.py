@@ -113,6 +113,22 @@ class Repository:
         finally:
             session.close()
 
+    def deactivate_account(self, email: str) -> bool:
+        """Persists account deactivation and clears any legacy database token."""
+        session = self.get_session()
+        try:
+            updated = session.query(Account).filter_by(email=email).update(
+                {Account.is_active: False, Account.token_encrypted: None}
+            )
+            session.commit()
+            return bool(updated)
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error deactivating account {email}: {e}")
+            raise
+        finally:
+            session.close()
+
     def disconnect_all_accounts(self) -> int:
         """
         Disconnects every connected Gmail account: deletes the encrypted OAuth

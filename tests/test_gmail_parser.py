@@ -3,6 +3,7 @@ Unit Tests - Gmail MIME Parser
 """
 import pytest
 import base64
+import json
 from gmail.parser import EmailParser
 
 
@@ -54,3 +55,5 @@ def test_parse_gmail_message_payload():
     assert parsed["is_unread"] is True
     assert parsed["is_archived"] is False
     assert "Important project update notes." in parsed["body_plain"]
+    assert json.loads(parsed["labels_json"]) == ["INBOX", "UNREAD"]
+    assert json.loads(parsed["attachments_json"]) == []

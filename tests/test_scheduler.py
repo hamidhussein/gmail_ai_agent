@@ -9,6 +9,9 @@ from unittest.mock import patch, MagicMock
 from database.repository import Repository
 from ai.schemas import EmailClassificationResult
 from app.constants import EmailCategory, ActionType, RiskLevel, AISource
+from app.config import config_manager
+from automation.scheduler import BackgroundScheduler
+from core.events import EVT_SYNC_ERROR
 
 
 @pytest.fixture
@@ -134,3 +137,21 @@ def test_bulk_save_emails(test_repo):
 
     inbox = test_repo.get_inbox_emails()
     assert len(inbox) == 10
+
+
+def test_live_sync_failure_is_reported_without_false_success():
+    scheduler = BackgroundScheduler()
+    account = MagicMock(id=1, email="live@test.com")
+
+    with (
+        patch.object(config_manager.config, "demo_mode", False),
+        patch("automation.scheduler.repository.get_active_account", return_value=account),
+        patch("automation.scheduler.repository.update_account_synced_at") as update_synced,
+        patch("automation.scheduler.GmailReader") as reader_class,
+        patch("automation.scheduler.event_bus.publish") as publish,
+    ):
+        reader_class.return_value.fetch_and_parse_inbox.side_effect = RuntimeError("network down")
+        scheduler._execute_sync_task()
+
+    update_synced.assert_not_called()
+    publish.assert_any_call(EVT_SYNC_ERROR, "network down")
