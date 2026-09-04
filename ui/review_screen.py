@@ -209,9 +209,47 @@ class ReviewScreenView(ft.Container):
             self.selected_suggestion_ids.clear()
         self.load_suggestions()
 
+    @staticmethod
+    def _is_trash_action(action_type: Any) -> bool:
+        val = getattr(action_type, "value", action_type)
+        return str(val).upper() in {"MOVE_TRASH", "UNSUBSCRIBE_AND_TRASH"}
+
     def _approve_single(self, sugg: CleanupSuggestion, email: EmailRecord):
+        if self._is_trash_action(sugg.action_type):
+            dialog = ft.AlertDialog(
+                modal=True,
+                title=ft.Text("Move email to trash?"),
+                content=ft.Text(
+                    f'Confirm moving "{(email.subject or "No Subject")[:80]}" to Gmail Trash. '
+                    "This is the required second confirmation."
+                ),
+            )
+
+            def cancel(e):
+                self.page_ref.close(dialog)
+
+            def confirm(e):
+                self.page_ref.close(dialog)
+                self._execute_single(sugg, email)
+
+            dialog.actions = [
+                ft.TextButton("Cancel", on_click=cancel),
+                ft.ElevatedButton(
+                    "Move to Trash",
+                    icon=ft.Icons.DELETE_OUTLINE,
+                    bgcolor=COLORS["danger"],
+                    color="#FFFFFF",
+                    on_click=confirm,
+                ),
+            ]
+            self.page_ref.open(dialog)
+            return
+
+        self._execute_single(sugg, email)
+
+    def _execute_single(self, sugg: CleanupSuggestion, email: EmailRecord):
         try:
-            if sugg.action_type in (ActionType.MOVE_TRASH.value, ActionType.UNSUBSCRIBE_AND_TRASH.value, "MOVE_TRASH", "UNSUBSCRIBE_AND_TRASH"):
+            if self._is_trash_action(sugg.action_type):
                 gmail_actions.trash_message(
                     email.message_id,
                     category=email.category or "SPAM",
@@ -265,11 +303,51 @@ class ReviewScreenView(ft.Container):
                 pass
             return
 
+        selected_items = [
+            (sugg, email)
+            for sugg, email in self.suggestion_items
+            if sugg.id in self.selected_suggestion_ids
+        ]
+        trash_count = sum(1 for sugg, _ in selected_items if self._is_trash_action(sugg.action_type))
+        if trash_count:
+            dialog = ft.AlertDialog(
+                modal=True,
+                title=ft.Text("Confirm bulk cleanup"),
+                content=ft.Text(
+                    f"This cleanup will move {trash_count} selected email"
+                    f"{'s' if trash_count != 1 else ''} to Gmail Trash. Confirm to continue."
+                ),
+            )
+
+            def cancel(e):
+                self.page_ref.close(dialog)
+
+            def confirm(e):
+                self.page_ref.close(dialog)
+                self._execute_bulk_approve()
+
+            dialog.actions = [
+                ft.TextButton("Cancel", on_click=cancel),
+                ft.ElevatedButton(
+                    "Confirm Cleanup",
+                    icon=ft.Icons.DELETE_SWEEP_OUTLINED,
+                    bgcolor=COLORS["danger"],
+                    color="#FFFFFF",
+                    on_click=confirm,
+                ),
+            ]
+            self.page_ref.open(dialog)
+            return
+
+        self._execute_bulk_approve()
+
+    def _execute_bulk_approve(self):
+
         approved_count = 0
         for sugg, email in self.suggestion_items:
             if sugg.id in self.selected_suggestion_ids:
                 try:
-                    if sugg.action_type in (ActionType.MOVE_TRASH.value, ActionType.UNSUBSCRIBE_AND_TRASH.value, "MOVE_TRASH", "UNSUBSCRIBE_AND_TRASH"):
+                    if self._is_trash_action(sugg.action_type):
                         gmail_actions.trash_message(
                             email.message_id,
                             category=email.category or "SPAM",
