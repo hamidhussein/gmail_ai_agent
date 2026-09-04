@@ -113,6 +113,40 @@ class Repository:
         finally:
             session.close()
 
+    def disconnect_all_accounts(self) -> int:
+        """
+        Disconnects every connected Gmail account: deletes the encrypted OAuth
+        token on disk, clears the stored token, and deactivates the account
+        record. Returns the number of accounts disconnected.
+        """
+        # Lazy import avoids a circular dependency at module load time.
+        try:
+            from authentication.token_manager import token_manager
+        except Exception:
+            token_manager = None
+
+        session = self.get_session()
+        count = 0
+        try:
+            accounts = session.query(Account).all()
+            for acc in accounts:
+                if token_manager is not None:
+                    try:
+                        token_manager.delete_token(acc.email)
+                    except Exception as e:
+                        logger.warning(f"Could not delete token for {acc.email}: {e}")
+                acc.is_active = False
+                acc.token_encrypted = None
+                count += 1
+            session.commit()
+            logger.info(f"Disconnected {count} account(s).")
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error disconnecting accounts: {e}")
+        finally:
+            session.close()
+        return count
+
     # ----------------- Email Operations -----------------
 
     @staticmethod
@@ -243,7 +277,10 @@ class Repository:
         account_id: Optional[int] = None,
         category: Optional[str] = None,
         search_query: Optional[str] = None,
+        search: Optional[str] = None,
         is_unread: Optional[bool] = None,
+        is_starred: Optional[bool] = None,
+        is_archived: Optional[bool] = False,
         min_importance: Optional[int] = None,
         limit: int = 100,
         offset: int = 0,
@@ -252,16 +289,21 @@ class Repository:
         try:
             q = session.query(EmailRecord).filter_by(is_trash=False)
 
+            if is_archived is not None:
+                q = q.filter(EmailRecord.is_archived == is_archived)
             if account_id:
                 q = q.filter(EmailRecord.account_id == account_id)
             if category and category != "ALL":
                 q = q.filter(EmailRecord.category == category)
             if is_unread is not None:
                 q = q.filter(EmailRecord.is_unread == is_unread)
+            if is_starred is not None:
+                q = q.filter(EmailRecord.is_starred == is_starred)
             if min_importance is not None:
                 q = q.filter(EmailRecord.importance_score >= min_importance)
-            if search_query:
-                term = f"%{search_query}%"
+            active_search = search_query or search
+            if active_search:
+                term = f"%{active_search}%"
                 q = q.filter(
                     or_(
                         EmailRecord.subject.ilike(term),

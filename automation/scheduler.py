@@ -52,6 +52,10 @@ class BackgroundScheduler:
         """Triggers an immediate asynchronous synchronization in a worker thread."""
         threading.Thread(target=self._execute_sync_task, args=(on_complete,), daemon=True).start()
 
+    def trigger_sync_now(self, on_complete: Optional[Callable[[], None]] = None) -> None:
+        """Convenience alias for run_sync_now_async()."""
+        self.run_sync_now_async(on_complete=on_complete)
+
     def _run_loop(self) -> None:
         """Main periodic loop."""
         while not self._stop_event.is_set():

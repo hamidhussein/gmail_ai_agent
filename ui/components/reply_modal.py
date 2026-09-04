@@ -4,7 +4,7 @@ GmailAI Assistant - AI Reply Assistant Dialog for Flet
 import threading
 import flet as ft
 from typing import Dict, Any, Optional, Callable
-from resources.styles.theme import COLORS
+from resources.styles.theme import COLORS, safe_update
 from app.constants import ReplyTone
 from ai.reply_generator import reply_generator
 from gmail.actions import gmail_actions
@@ -48,8 +48,8 @@ class ReplyDialog(ft.AlertDialog):
             content_padding=10,
         )
 
-        self.spinner = ft.ProgressRing(width=18, height=18, stroke_width=2, color=COLORS["warning"], visible=False)
-        self.status_text = ft.Text("Generating draft...", size=12, color=COLORS["warning"], visible=False)
+        self.spinner = ft.ProgressRing(width=18, height=18, stroke_width=2, color=COLORS["warning"], visible=True)
+        self.status_text = ft.Text("AI is drafting your response...", size=12, color=COLORS["warning"], visible=True)
         self.char_count_text = ft.Text("0 chars", size=11, color=COLORS["text_muted"])
 
         self.reply_editor = ft.TextField(
@@ -67,7 +67,8 @@ class ReplyDialog(ft.AlertDialog):
             "Regenerate",
             icon=ft.Icons.AUTO_AWESOME,
             bgcolor=COLORS["primary"],
-            color=COLORS["text_primary"],
+            color="#FFFFFF",
+            disabled=True,
             on_click=lambda e: self._trigger_generation(),
         )
 
@@ -75,7 +76,7 @@ class ReplyDialog(ft.AlertDialog):
             "Create Gmail Draft",
             icon=ft.Icons.SAVE_OUTLINED,
             bgcolor=COLORS["success"],
-            color=COLORS["text_primary"],
+            color="#FFFFFF",
             on_click=lambda e: self._save_draft(),
         )
 
@@ -140,7 +141,7 @@ class ReplyDialog(ft.AlertDialog):
             bgcolor=COLORS["bg_main"],
         )
 
-        self._trigger_generation()
+        self._start_worker_generation()
 
     def _on_tone_changed(self, e):
         self.selected_tone = self.tone_dropdown.value
@@ -148,11 +149,8 @@ class ReplyDialog(ft.AlertDialog):
 
     def _on_text_changed(self, e):
         count = len((self.reply_editor.value or "").strip())
-        try:
-            if self.page:
-                self.char_count_text.update()
-        except Exception:
-            pass
+        self.char_count_text.value = f"{count:,} chars"
+        safe_update(self.char_count_text)
 
     def _trigger_generation(self) -> None:
         self.spinner.visible = True
@@ -160,9 +158,10 @@ class ReplyDialog(ft.AlertDialog):
         self.status_text.value = "AI is drafting your response..."
         self.status_text.color = COLORS["warning"]
         self.regen_btn.disabled = True
-        if self.page:
-            self.page.update()
+        safe_update(self.page_ref)
+        self._start_worker_generation()
 
+    def _start_worker_generation(self) -> None:
         def worker():
             tone_val = ReplyTone(self.selected_tone)
             notes = (self.custom_prompt.value or "").strip()
@@ -184,23 +183,23 @@ class ReplyDialog(ft.AlertDialog):
             self.status_text.color = COLORS["success"]
             self.regen_btn.disabled = False
             self.char_count_text.value = f"{len(draft.strip()):,} chars"
-            if self.page:
-                self.page.update()
+            safe_update(self.page_ref)
 
         threading.Thread(target=worker, daemon=True).start()
 
     def _copy_text(self) -> None:
-        if self.page:
-            self.page.set_clipboard(self.reply_editor.value or "")
-            self.page.open(ft.SnackBar(ft.Text("Copied draft to clipboard!"), bgcolor=COLORS["success"]))
+        try:
+            self.page_ref.set_clipboard(self.reply_editor.value or "")
+            self.page_ref.open(ft.SnackBar(ft.Text("Copied draft to clipboard!"), bgcolor=COLORS["success"]))
+        except Exception:
+            pass
 
     def _save_draft(self) -> None:
         self.draft_btn.disabled = True
         self.status_text.visible = True
         self.status_text.value = "Creating Gmail draft..."
         self.status_text.color = COLORS["warning"]
-        if self.page:
-            self.page.update()
+        safe_update(self.page_ref)
 
         def worker():
             try:
@@ -218,11 +217,12 @@ class ReplyDialog(ft.AlertDialog):
                 self.status_text.value = f"Saved locally: {ex}"
                 self.status_text.color = COLORS["warning"]
             self.draft_btn.disabled = False
-            if self.page:
-                self.page.update()
+            safe_update(self.page_ref)
 
         threading.Thread(target=worker, daemon=True).start()
 
     def close(self) -> None:
-        if self.page:
-            self.page.close(self)
+        try:
+            self.page_ref.close(self)
+        except Exception:
+            pass

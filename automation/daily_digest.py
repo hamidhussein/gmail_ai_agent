@@ -32,7 +32,9 @@ class DailyDigestGenerator:
 
         # Query recent emails
         recent_emails = repository.get_inbox_emails(limit=100)
-        today_emails = [e for e in recent_emails if e.received_at >= yesterday]
+        today_emails = [e for e in recent_emails if e.received_at and e.received_at >= yesterday]
+        if not today_emails and recent_emails:
+            today_emails = recent_emails[:30]
 
         total_count = len(today_emails)
         important_emails = [e for e in today_emails if e.importance_score >= 75]

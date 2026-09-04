@@ -68,9 +68,9 @@ class ProtectedCategory(str, Enum):
 
 # Standard Category Colors for UI
 CATEGORY_COLORS = {
-    EmailCategory.PERSONAL: "#3B82F6",       # Blue
-    EmailCategory.WORK: "#6366F1",           # Indigo
-    EmailCategory.CLIENT: "#8B5CF6",         # Purple
+    EmailCategory.PERSONAL: "#3B82F6",       # Bright Blue
+    EmailCategory.WORK: "#2563EB",           # Sapphire Blue
+    EmailCategory.CLIENT: "#0D9488",         # Executive Teal
     EmailCategory.FINANCE: "#10B981",        # Emerald Green
     EmailCategory.BANK: "#059669",           # Dark Emerald Green
     EmailCategory.LEGAL: "#D97706",          # Amber

@@ -19,6 +19,12 @@ from memory.learning import learning_engine
 from app.constants import SuggestionStatus, ActionType
 
 
+from core.events import event_bus, EVT_SUGGESTION_ACTIONED
+import logging
+
+logger = logging.getLogger("GmailAI.ReviewScreen")
+
+
 class ReviewScreenView(ft.Container):
     """Smart Cleanup review screen with batch selection, confidence indicators, and bulk execution."""
 
@@ -39,7 +45,7 @@ class ReviewScreenView(ft.Container):
             "Approve Selected (0)",
             icon=ft.Icons.CHECK,
             bgcolor=COLORS["success"],
-            color=COLORS["text_primary"],
+            color="#FFFFFF",
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
             on_click=lambda e: self._bulk_approve(),
         )
@@ -108,8 +114,9 @@ class ReviewScreenView(ft.Container):
     def load_suggestions(self) -> None:
         """Loads pending suggestions from repository."""
         self.suggestions_column.controls.clear()
-        self.suggestion_items = repository.get_pending_suggestions()
+        self.suggestion_items = repository.get_pending_suggestions(limit=100)
         self.selected_suggestion_ids = {s.id for s, _ in self.suggestion_items}
+        self.select_all_checkbox.value = len(self.selected_suggestion_ids) > 0
 
         total = len(self.suggestion_items)
         self.status_count_text.value = f"{total} suggestions ready for safe review & cleanup."
@@ -190,7 +197,9 @@ class ReviewScreenView(ft.Container):
             self.selected_suggestion_ids.add(sid)
         else:
             self.selected_suggestion_ids.discard(sid)
+        self.select_all_checkbox.value = (len(self.selected_suggestion_ids) == len(self.suggestion_items) and len(self.suggestion_items) > 0)
         self.bulk_approve_btn.text = f"Approve Selected ({len(self.selected_suggestion_ids)})"
+        safe_update(self.select_all_checkbox)
         safe_update(self.bulk_approve_btn)
 
     def _on_select_all_toggle(self, e):
@@ -203,18 +212,34 @@ class ReviewScreenView(ft.Container):
     def _approve_single(self, sugg: CleanupSuggestion, email: EmailRecord):
         try:
             if sugg.action_type in (ActionType.MOVE_TRASH.value, ActionType.UNSUBSCRIBE_AND_TRASH.value, "MOVE_TRASH", "UNSUBSCRIBE_AND_TRASH"):
-                gmail_actions.trash_message(email.message_id)
+                gmail_actions.trash_message(
+                    email.message_id,
+                    category=email.category or "SPAM",
+                    sender=email.sender,
+                    subject=email.subject or "",
+                    user_approved=True,
+                    double_confirmed=True,
+                )
             else:
-                gmail_actions.archive_message(email.message_id)
+                gmail_actions.archive_message(
+                    email.message_id,
+                    category=email.category or "NEWSLETTER",
+                    sender=email.sender,
+                    subject=email.subject or "",
+                    user_approved=True,
+                )
 
             repository.update_suggestion_status(sugg.id, SuggestionStatus.EXECUTED.value)
             learning_engine.on_user_approved_action(email.sender, sugg.action_type)
+            event_bus.publish(EVT_SUGGESTION_ACTIONED, sugg.id)
+
             try:
                 self.page_ref.open(ft.SnackBar(ft.Text(f"Cleaned: {email.subject[:30]}..."), bgcolor=COLORS["success"]))
             except Exception:
                 pass
             self.load_suggestions()
         except Exception as ex:
+            logger.error(f"Error approving suggestion: {ex}")
             try:
                 self.page_ref.open(ft.SnackBar(ft.Text(f"Error: {ex}"), bgcolor=COLORS["danger"]))
             except Exception:
@@ -222,6 +247,7 @@ class ReviewScreenView(ft.Container):
 
     def _dismiss_single(self, sugg: CleanupSuggestion):
         repository.update_suggestion_status(sugg.id, SuggestionStatus.REJECTED.value)
+        event_bus.publish(EVT_SUGGESTION_ACTIONED, sugg.id)
         try:
             self.page_ref.open(ft.SnackBar(ft.Text("Suggestion dismissed"), bgcolor=COLORS["text_secondary"]))
         except Exception:
@@ -229,7 +255,14 @@ class ReviewScreenView(ft.Container):
         self.load_suggestions()
 
     def _bulk_approve(self):
+        if not self.selected_suggestion_ids and self.select_all_checkbox.value:
+            self.selected_suggestion_ids = {s.id for s, _ in self.suggestion_items}
+
         if not self.selected_suggestion_ids:
+            try:
+                self.page_ref.open(ft.SnackBar(ft.Text("Please select at least one suggestion."), bgcolor=COLORS["warning"]))
+            except Exception:
+                pass
             return
 
         approved_count = 0
@@ -237,16 +270,32 @@ class ReviewScreenView(ft.Container):
             if sugg.id in self.selected_suggestion_ids:
                 try:
                     if sugg.action_type in (ActionType.MOVE_TRASH.value, ActionType.UNSUBSCRIBE_AND_TRASH.value, "MOVE_TRASH", "UNSUBSCRIBE_AND_TRASH"):
-                        gmail_actions.trash_message(email.message_id)
+                        gmail_actions.trash_message(
+                            email.message_id,
+                            category=email.category or "SPAM",
+                            sender=email.sender,
+                            subject=email.subject or "",
+                            user_approved=True,
+                            double_confirmed=True,
+                        )
                     else:
-                        gmail_actions.archive_message(email.message_id)
+                        gmail_actions.archive_message(
+                            email.message_id,
+                            category=email.category or "NEWSLETTER",
+                            sender=email.sender,
+                            subject=email.subject or "",
+                            user_approved=True,
+                        )
                     repository.update_suggestion_status(sugg.id, SuggestionStatus.EXECUTED.value)
+                    learning_engine.on_user_approved_action(email.sender, sugg.action_type)
                     approved_count += 1
-                except Exception:
-                    pass
+                except Exception as ex:
+                    logger.warning(f"Error bulk approving suggestion {sugg.id}: {ex}")
+
+        event_bus.publish(EVT_SUGGESTION_ACTIONED, approved_count)
 
         try:
-            self.page_ref.open(ft.SnackBar(ft.Text(f"Successfully processed {approved_count} emails!"), bgcolor=COLORS["success"]))
+            self.page_ref.open(ft.SnackBar(ft.Text(f"Successfully cleaned {approved_count} emails!"), bgcolor=COLORS["success"]))
         except Exception:
             pass
         self.load_suggestions()
@@ -254,6 +303,7 @@ class ReviewScreenView(ft.Container):
     def _bulk_dismiss(self):
         for sid in self.selected_suggestion_ids:
             repository.update_suggestion_status(sid, SuggestionStatus.REJECTED.value)
+        event_bus.publish(EVT_SUGGESTION_ACTIONED, len(self.selected_suggestion_ids))
         try:
             self.page_ref.open(ft.SnackBar(ft.Text("Dismissed selected suggestions"), bgcolor=COLORS["text_secondary"]))
         except Exception:

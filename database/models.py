@@ -82,6 +82,14 @@ class EmailRecord(Base):
     account = relationship("Account", back_populates="emails")
     cleanup_suggestions = relationship("CleanupSuggestion", back_populates="email", cascade="all, delete-orphan")
 
+    @property
+    def reasoning(self) -> str:
+        return self.ai_reasoning or ""
+
+    @property
+    def action_items(self) -> str:
+        return self.action_items_json or "[]"
+
     __table_args__ = (
         Index("idx_email_account_received", "account_id", "received_at"),
         Index("idx_email_category_importance", "category", "importance_score"),

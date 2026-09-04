@@ -13,17 +13,17 @@ THEME = {
         "bg_sidebar": "#FFFFFF",    # Pure White Sidebar
         "border": "#E2E8F0",        # Light Slate 200 Border
         "text_primary": "#0F172A",  # Deep Slate 900
-        "text_secondary": "#64748B",# Slate 500
+        "text_secondary": "#475569",# Slate 600 (Higher contrast)
         "text_muted": "#94A3B8",    # Slate 400
-        "primary": "#6366F1",       # Electric Indigo
-        "primary_hover": "#4F46E5", # Deep Indigo
-        "secondary": "#0EA5E9",     # Sky Blue
-        "success": "#10B981",       # Emerald
+        "primary": "#2563EB",       # Vibrant Sapphire Blue (Non-purple)
+        "primary_hover": "#1D4ED8", # Deep Sapphire Blue
+        "secondary": "#0284C7",     # Electric Sky Blue
+        "success": "#10B981",       # Emerald Green
         "warning": "#F59E0B",       # Amber
-        "danger": "#F43F5E",        # Coral
-        "danger_hover": "#E11D48",  # Rose Red
-        "badge_bg": "#EEF2FF",      # Indigo 50
-        "badge_text": "#4F46E5",    # Indigo 600
+        "danger": "#EF4444",        # Rose Red
+        "danger_hover": "#DC2626",  # Deep Red
+        "badge_bg": "#EFF6FF",      # Blue 50 Tint
+        "badge_text": "#1D4ED8",    # Blue 700 Accent
     },
     "dark": {
         "bg_main": "#060913",       # Deep Midnight Blue (Obsidian)
@@ -34,15 +34,15 @@ THEME = {
         "text_primary": "#FFFFFF",  # Crisp White
         "text_secondary": "#94A3B8",# Soft Slate Blue
         "text_muted": "#475569",    # Deep Slate
-        "primary": "#6366F1",       # Electric Indigo
-        "primary_hover": "#4F46E5", # Deep Indigo
-        "secondary": "#0EA5E9",     # Sky Blue
+        "primary": "#3B82F6",       # Bright Sapphire Blue
+        "primary_hover": "#2563EB", # Deep Sapphire Blue
+        "secondary": "#38BDF8",     # Sky Blue
         "success": "#10B981",       # Neon Emerald
         "warning": "#F59E0B",       # Amber
-        "danger": "#F43F5E",        # Hot Coral
-        "danger_hover": "#E11D48",  # Rose Red
-        "badge_bg": "#1E1B4B",      # Deep Indigo Glow
-        "badge_text": "#A5B4FC",    # Soft Indigo Text
+        "danger": "#EF4444",        # Modern Red
+        "danger_hover": "#DC2626",  # Deep Red
+        "badge_bg": "#1E293B",      # Deep Slate Glow
+        "badge_text": "#93C5FD",    # Soft Blue Text
     }
 }
 

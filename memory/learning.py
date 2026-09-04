@@ -51,5 +51,24 @@ class ActiveLearningEngine:
         """Tracks when a user replies to an email."""
         repository.record_sender_interaction(email=sender_email, replied=True)
 
+    # ------------------------------------------------------------------
+    # Convenience aliases used by the UI layer
+    # ------------------------------------------------------------------
+    @staticmethod
+    def record_read(sender_email: str) -> None:
+        """Alias for on_user_email_opened(): called when the user opens an email."""
+        ActiveLearningEngine.on_user_email_opened(sender_email)
+
+    @staticmethod
+    def on_user_approved_action(sender_email: str, action_type: str = "") -> None:
+        """
+        Called when the user approves an AI cleanup suggestion (archive/trash/etc.).
+
+        Records the approval as positive feedback via on_user_suggestion_decision().
+        The action_type is accepted for call-site compatibility and logging context.
+        """
+        logger.info(f"User approved '{action_type or 'cleanup'}' action for {sender_email}")
+        ActiveLearningEngine.on_user_suggestion_decision(sender_email, was_approved=True)
+
 
 learning_engine = ActiveLearningEngine()

@@ -60,7 +60,7 @@ class AppConfigModel(BaseModel):
 
     # UI Appearance
     ui_theme: str = "light"
-    accent_color: str = "#6366F1"
+    accent_color: str = "#2563EB"
 
     # Paths
     credentials_path: Optional[str] = None

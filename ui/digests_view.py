@@ -20,14 +20,14 @@ class DailyDigestsView(ft.Container):
 
     def __init__(self, page: ft.Page, **kwargs):
         self.page_ref = page
-        self.gen_btn_spinner = ft.ProgressRing(width=16, height=16, stroke_width=2, color=COLORS["text_primary"], visible=False)
+        self.gen_btn_spinner = ft.ProgressRing(width=16, height=16, stroke_width=2, color="#FFFFFF", visible=False)
         self.gen_btn = ft.ElevatedButton(
             content=ft.Row([
                 self.gen_btn_spinner,
                 ft.Text("Generate Today's Briefing", weight=ft.FontWeight.BOLD, size=13),
             ], spacing=8, tight=True),
             bgcolor=COLORS["primary"],
-            color=COLORS["text_primary"],
+            color="#FFFFFF",
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
             on_click=lambda e: self._generate_now(),
         )

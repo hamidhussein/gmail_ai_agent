@@ -39,17 +39,17 @@ class DashboardView(ft.Container):
             bgcolor=COLORS["badge_bg"],
             padding=padding_symmetric(horizontal=12, vertical=6),
             border_radius=8,
-            border=border_all(1, "#312E81"),
+            border=border_all(1, COLORS["border"]),
         )
 
-        self.sync_spinner = ft.ProgressRing(width=16, height=16, stroke_width=2, color=COLORS["text_primary"], visible=False)
+        self.sync_spinner = ft.ProgressRing(width=16, height=16, stroke_width=2, color="#FFFFFF", visible=False)
         self.sync_btn = ft.ElevatedButton(
             content=ft.Row([
                 self.sync_spinner,
                 ft.Text("Sync Now", weight=ft.FontWeight.BOLD, size=13),
             ], spacing=8, tight=True),
             bgcolor=COLORS["primary"],
-            color=COLORS["text_primary"],
+            color="#FFFFFF",
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
             on_click=lambda e: self._handle_sync_click(),
         )
@@ -77,7 +77,7 @@ class DashboardView(ft.Container):
                     "Review Suggestions",
                     icon=ft.Icons.ARROW_FORWARD,
                     bgcolor=COLORS["success"],
-                    color=COLORS["text_primary"],
+                    color="#FFFFFF",
                     style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
                     on_click=lambda e: self.on_navigate("review"),
                 ),

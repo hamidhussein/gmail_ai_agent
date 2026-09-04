@@ -14,6 +14,7 @@ from core.events import (
     EVT_TOAST_MESSAGE,
     EVT_THEME_CHANGED,
     EVT_ACCOUNT_CHANGED,
+    EVT_SUGGESTION_ACTIONED,
 )
 from database.repository import repository
 from database.migrations import seed_demo_data
@@ -25,7 +26,6 @@ from resources.styles.theme import (
     border_only,
     padding_all,
     padding_symmetric,
-    safe_update,
 )
 
 from ui.dashboard import DashboardView
@@ -103,9 +103,22 @@ class GmailAIApp:
             visible=False,
         )
 
+        self.inbox_badge_text = ft.Text("0", size=10, weight=ft.FontWeight.BOLD, color="#FFFFFF")
+        self.inbox_badge_container = ft.Container(
+            content=self.inbox_badge_text,
+            bgcolor=COLORS["primary"],
+            padding=padding_symmetric(horizontal=6, vertical=2),
+            border_radius=10,
+            visible=False,
+        )
+
         nav_controls = []
         for key, label, icon_outline, icon_filled in self.nav_items:
-            badge = self.cleanup_badge_container if key == "review" else None
+            badge = None
+            if key == "review":
+                badge = self.cleanup_badge_container
+            elif key == "inbox":
+                badge = self.inbox_badge_container
             btn = self._build_nav_btn(key, label, icon_outline, badge)
             self.nav_buttons[key] = btn
             nav_controls.append(btn)
@@ -305,6 +318,13 @@ class GmailAIApp:
         else:
             self.cleanup_badge_container.visible = False
 
+        unread_count = stats.get("unread_emails", 0)
+        if unread_count > 0:
+            self.inbox_badge_text.value = str(unread_count)
+            self.inbox_badge_container.visible = True
+        else:
+            self.inbox_badge_container.visible = False
+
         account = repository.get_active_account()
         if account:
             self.user_email_text.value = account.email
@@ -315,6 +335,7 @@ class GmailAIApp:
 
     def _register_events(self) -> None:
         event_bus.subscribe(EVT_SYNC_COMPLETED, lambda data: self._on_sync_event(data))
+        event_bus.subscribe(EVT_SUGGESTION_ACTIONED, lambda data: self._on_sync_event(data))
         event_bus.subscribe(EVT_TOAST_MESSAGE, lambda msg: self._show_toast(str(msg)))
         event_bus.subscribe(EVT_THEME_CHANGED, lambda theme: self._on_theme_event(theme))
         event_bus.subscribe(EVT_ACCOUNT_CHANGED, lambda email: self._on_account_changed(email))

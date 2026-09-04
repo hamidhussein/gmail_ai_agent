@@ -15,7 +15,7 @@ class StatCard(ft.Container):
         value: str,
         icon: str = ft.Icons.ANALYTICS_OUTLINED,
         trend: Optional[str] = None,
-        accent_color: str = "#6366F1",
+        accent_color: str = "#2563EB",
         expand: bool = True,
         **kwargs,
     ):
