@@ -24,6 +24,7 @@ build/
 dist/
 *.spec.bak
 *.exe
+*.zip
 
 # Testing
 .pytest_cache/
