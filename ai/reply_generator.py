@@ -8,6 +8,7 @@ from app.constants import ReplyTone
 from app.config import config_manager
 from ai.local_model import LocalOllamaClient
 from ai.cloud_model import CloudOpenAIClient
+from ai.gemini_model import CloudGeminiClient
 
 logger = logging.getLogger("GmailAI.ReplyGenerator")
 
@@ -29,8 +30,11 @@ class ReplyGenerator:
             base_url=config_manager.config.ollama_url,
             default_model=config_manager.config.ollama_model,
         )
-        self.cloud_client = CloudOpenAIClient(
+        self.openai_client = CloudOpenAIClient(
             default_model=config_manager.config.openai_model,
+        )
+        self.gemini_client = CloudGeminiClient(
+            default_model=config_manager.config.gemini_model,
         )
 
     def generate_reply(
@@ -72,14 +76,22 @@ Draft the reply:"""
         except Exception:
             pass
 
-        # Try Cloud AI
-        if self.cloud_client.is_configured():
-            try:
-                reply = self.cloud_client.generate_text(user_prompt, system_prompt)
-                if reply and len(reply) > 20:
-                    return reply
-            except Exception:
-                pass
+        # Try Cloud AI (prefer configured provider)
+        cloud_clients = []
+        provider = config_manager.config.cloud_provider.lower()
+        if provider == "gemini":
+            cloud_clients = [self.gemini_client, self.openai_client]
+        else:
+            cloud_clients = [self.openai_client, self.gemini_client]
+
+        for client in cloud_clients:
+            if client.is_configured():
+                try:
+                    reply = client.generate_text(user_prompt, system_prompt)
+                    if reply and len(reply) > 20:
+                        return reply
+                except Exception:
+                    pass
 
         # High-quality template fallback if no AI is available
         salutation = f"Hi {sender_name.split()[0] if sender_name else 'there'},"

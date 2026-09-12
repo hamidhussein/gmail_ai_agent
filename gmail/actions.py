@@ -29,16 +29,27 @@ class GmailActions:
             raise GmailAPIError("Gmail service is not available.")
         return service
 
+    def ensure_authenticated(self) -> bool:
+        """Fail fast before a batch when Gmail authorization is unavailable."""
+        try:
+            self._get_service()
+        except Exception:
+            if not config_manager.config.demo_mode:
+                raise
+        return True
+
     @staticmethod
     def _handle_remote_failure(action_name: str, message_id: str, error: Exception) -> None:
         """Allow local-only mutations exclusively when demo mode is explicit."""
+        from core.error_reporter import sanitize_error
+        clean_error = sanitize_error(error, action_name)
         if config_manager.config.demo_mode:
-            logger.info("Demo mode %s for %s (%s)", action_name, message_id, error)
+            logger.info("Demo mode %s for %s (%s)", action_name, message_id, clean_error)
             return
-        logger.error("Gmail %s failed for %s: %s", action_name, message_id, error)
+        logger.error("Gmail %s failed for %s: %s", action_name, message_id, clean_error)
         if isinstance(error, GmailAPIError):
             raise error
-        raise GmailAPIError(f"Could not {action_name} Gmail message {message_id}: {error}") from error
+        raise GmailAPIError(f"Could not {action_name} Gmail message {message_id}: {clean_error}") from error
 
     def archive(
         self,

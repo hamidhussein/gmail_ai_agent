@@ -46,9 +46,10 @@ class Repository:
         self.init_schema()
 
     def init_schema(self) -> None:
-        """Creates all database tables."""
-        Base.metadata.create_all(self.engine)
-        logger.info(f"Database initialized at {self.db_path}")
+        """Initialises or upgrades the database schema via versioned migrations."""
+        from database.migration_runner import run_migrations
+        schema_version = run_migrations(self.engine)
+        logger.info(f"Database ready at {self.db_path} (schema v{schema_version})")
 
     def get_session(self) -> Session:
         return self.Session()
@@ -83,6 +84,14 @@ class Repository:
         session = self.get_session()
         try:
             return session.query(Account).all()
+        finally:
+            session.close()
+
+    def get_account_by_email(self, email: str) -> Optional[Account]:
+        """Returns an account by email, or None if not found."""
+        session = self.get_session()
+        try:
+            return session.query(Account).filter_by(email=email).first()
         finally:
             session.close()
 
@@ -358,9 +367,14 @@ class Repository:
             ).count()
 
             # Cleanup suggested count
-            cleanup_count = session.query(CleanupSuggestion).filter_by(
-                status=SuggestionStatus.PENDING.value
-            ).count()
+            cleanup_q = (
+                session.query(CleanupSuggestion)
+                .join(EmailRecord, CleanupSuggestion.email_id == EmailRecord.id)
+                .filter(CleanupSuggestion.status == SuggestionStatus.PENDING.value)
+            )
+            if account_id:
+                cleanup_q = cleanup_q.filter(EmailRecord.account_id == account_id)
+            cleanup_count = cleanup_q.count()
 
             return {
                 "total_emails": total,
@@ -411,18 +425,25 @@ class Repository:
         finally:
             session.close()
 
-    def get_pending_suggestions(self, limit: int = 100) -> List[Tuple[CleanupSuggestion, EmailRecord]]:
+    def get_pending_suggestions(
+        self,
+        limit: int = 100,
+        account_id: Optional[int] = None,
+    ) -> List[Tuple[CleanupSuggestion, EmailRecord]]:
         session = self.get_session()
         try:
-            results = (
+            query = (
                 session.query(CleanupSuggestion, EmailRecord)
                 .join(EmailRecord, CleanupSuggestion.email_id == EmailRecord.id)
                 .filter(CleanupSuggestion.status == SuggestionStatus.PENDING.value)
-                .order_by(desc(CleanupSuggestion.confidence))
+            )
+            if account_id:
+                query = query.filter(EmailRecord.account_id == account_id)
+            return (
+                query.order_by(desc(CleanupSuggestion.confidence))
                 .limit(limit)
                 .all()
             )
-            return results
         finally:
             session.close()
 
@@ -440,6 +461,31 @@ class Repository:
         except Exception as e:
             session.rollback()
             logger.error(f"Error updating suggestion status: {e}")
+            raise
+        finally:
+            session.close()
+
+    def update_suggestions_status(self, suggestion_ids: List[int], status: str) -> int:
+        """Update multiple cleanup suggestions in one transaction."""
+        ids = list(dict.fromkeys(suggestion_ids))
+        if not ids:
+            return 0
+
+        session = self.get_session()
+        try:
+            values = {CleanupSuggestion.status: status}
+            if status == SuggestionStatus.EXECUTED.value:
+                values[CleanupSuggestion.executed_at] = _utcnow()
+            updated = (
+                session.query(CleanupSuggestion)
+                .filter(CleanupSuggestion.id.in_(ids))
+                .update(values, synchronize_session=False)
+            )
+            session.commit()
+            return updated
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error updating cleanup suggestions: {e}")
             raise
         finally:
             session.close()

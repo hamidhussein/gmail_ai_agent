@@ -1,4 +1,4 @@
-"""
+﻿"""
 GmailAI Assistant - UI Design System & Theme Tokens for Flet
 """
 import flet as ft
@@ -7,42 +7,100 @@ from app.constants import EmailCategory, CATEGORY_COLORS
 # Core Color Palettes
 THEME = {
     "light": {
-        "bg_main": "#F8FAFC",       # Clean Slate 50
-        "bg_card": "#FFFFFF",       # Crisp White Card
-        "bg_card_hover": "#F1F5F9", # Light Slate 100
-        "bg_sidebar": "#FFFFFF",    # Pure White Sidebar
-        "border": "#E2E8F0",        # Light Slate 200 Border
-        "text_primary": "#0F172A",  # Deep Slate 900
-        "text_secondary": "#475569",# Slate 600 (Higher contrast)
-        "text_muted": "#94A3B8",    # Slate 400
-        "primary": "#2563EB",       # Vibrant Sapphire Blue (Non-purple)
-        "primary_hover": "#1D4ED8", # Deep Sapphire Blue
-        "secondary": "#0284C7",     # Electric Sky Blue
-        "success": "#10B981",       # Emerald Green
-        "warning": "#F59E0B",       # Amber
-        "danger": "#EF4444",        # Rose Red
-        "danger_hover": "#DC2626",  # Deep Red
-        "badge_bg": "#EFF6FF",      # Blue 50 Tint
-        "badge_text": "#1D4ED8",    # Blue 700 Accent
+        # Backgrounds
+        "bg_main": "#F8F6F3",
+        "bg_card": "#FFFFFF",
+        "bg_card_hover": "#F5F3F7",
+        "bg_sidebar": "#21142B",
+        "surface_alt": "#FAFAFA",
+        "bg_zebra": "#FBF9F7",
+        # Sidebar
+        "sidebar_text": "#FFF7FC",
+        "sidebar_muted": "#C9B9CE",
+        "sidebar_hover": "#2E1A3A",
+        # Borders
+        "border": "#E8E2EE",
+        "border_hover": "#D0C5D8",
+        # Text
+        "text_primary": "#1E1528",
+        "text_secondary": "#5E546A",
+        "text_muted": "#9B90A3",
+        # Brand colors - used sparingly
+        "primary": "#6D28D9",
+        "primary_hover": "#5B21B6",
+        "primary_soft": "#EDE9FE",
+        "secondary": "#DB2777",
+        "secondary_hover": "#BE185D",
+        "accent": "#0891B2",
+        "accent_hover": "#0E7490",
+        # Semantic colors
+        "success": "#059669",
+        "success_soft": "#ECFDF5",
+        "warning": "#B45309",
+        "warning_soft": "#FFFBEB",
+        "danger": "#DC2626",
+        "danger_hover": "#B91C1C",
+        "danger_soft": "#FEF2F2",
+        # Badge system
+        "badge_bg": "#F0EEF4",
+        "badge_text": "#4B4558",
+        # Chip active state
+        "chip_active_bg": "#1E1535",
+        "chip_active_text": "#FFFFFF",
+        # Icon badge backgrounds
+        "icon_bg": "#EDE9FE",
+        # Nav
+        "nav_active_bg": "#2E1A3A",
+        # Misc
+        "shadow": "#2D1B4012",
     },
     "dark": {
-        "bg_main": "#060913",       # Deep Midnight Blue (Obsidian)
-        "bg_card": "#0F1423",       # Elevated Glass Surface
-        "bg_card_hover": "#1A2138", # Floating Hover Surface
-        "bg_sidebar": "#030408",    # Vantablack sidebar
-        "border": "#1E293B",        # Subtle glowing edge
-        "text_primary": "#FFFFFF",  # Crisp White
-        "text_secondary": "#94A3B8",# Soft Slate Blue
-        "text_muted": "#475569",    # Deep Slate
-        "primary": "#3B82F6",       # Bright Sapphire Blue
-        "primary_hover": "#2563EB", # Deep Sapphire Blue
-        "secondary": "#38BDF8",     # Sky Blue
-        "success": "#10B981",       # Neon Emerald
-        "warning": "#F59E0B",       # Amber
-        "danger": "#EF4444",        # Modern Red
-        "danger_hover": "#DC2626",  # Deep Red
-        "badge_bg": "#1E293B",      # Deep Slate Glow
-        "badge_text": "#93C5FD",    # Soft Blue Text
+        # Backgrounds
+        "bg_main": "#120C16",
+        "bg_card": "#1C1421",
+        "bg_card_hover": "#261B2D",
+        "bg_sidebar": "#0C080F",
+        "surface_alt": "#181120",
+        "bg_zebra": "#17101B",
+        # Sidebar
+        "sidebar_text": "#FFF7FC",
+        "sidebar_muted": "#BFB0C4",
+        "sidebar_hover": "#28183A",
+        # Borders
+        "border": "#352540",
+        "border_hover": "#503860",
+        # Text
+        "text_primary": "#F5F0FA",
+        "text_secondary": "#C0B2C8",
+        "text_muted": "#7E7088",
+        # Brand colors
+        "primary": "#9333EA",
+        "primary_hover": "#7C3AED",
+        "primary_soft": "#2E1748",
+        "secondary": "#F472B6",
+        "secondary_hover": "#EC4899",
+        "accent": "#22D3EE",
+        "accent_hover": "#06B6D4",
+        # Semantic
+        "success": "#10B981",
+        "success_soft": "#052E1B",
+        "warning": "#D97706",
+        "warning_soft": "#2D1B07",
+        "danger": "#EF4444",
+        "danger_hover": "#DC2626",
+        "danger_soft": "#3B0F0F",
+        # Badge system
+        "badge_bg": "#241A2E",
+        "badge_text": "#C8BAD0",
+        # Chip active
+        "chip_active_bg": "#3B2A5A",
+        "chip_active_text": "#FFFFFF",
+        # Icon badge backgrounds
+        "icon_bg": "#2A1A42",
+        # Nav
+        "nav_active_bg": "#28183A",
+        # Misc
+        "shadow": "#00000050",
     }
 }
 
@@ -74,7 +132,7 @@ def border_all(width: float = 1, color: str = None) -> ft.Border:
 
 
 def border_only(**kwargs) -> ft.Border:
-    """Returns a selective border (e.g. right=ft.BorderSide(1, color))."""
+    """Returns a selective border."""
     return ft.Border.only(**kwargs)
 
 
@@ -102,23 +160,183 @@ def safe_update(control: ft.Control) -> None:
         pass
 
 
+def icon_badge(
+    icon: str,
+    color: str = "#FFFFFF",
+    bg: str = None,
+    size: int = 14,
+    pad: int = 6,
+    radius: int = 8,
+) -> ft.Container:
+    """Standard colored icon-in-rounded-square badge for section headers."""
+    return ft.Container(
+        content=ft.Icon(icon, size=size, color=color),
+        bgcolor=bg or COLORS["primary"],
+        padding=pad,
+        border_radius=radius,
+    )
+
+
+def label_text(text: str, color: str = None, size: int = 11) -> ft.Text:
+    """ALL-CAPS muted label used in table headers and card sub-labels."""
+    return ft.Text(
+        text.upper(),
+        size=size,
+        weight=ft.FontWeight.W_600,
+        color=color or COLORS["text_muted"],
+    )
+
+
 def glass_container(
     content: ft.Control,
-    padding = 16,
+    padding=16,
     border_color: str = None,
     bg_color: str = None,
     border_radius: int = 12,
     expand: bool = False,
     on_click=None,
+    accent_color: str = None,
 ) -> ft.Container:
-    """Creates a polished card container with subtle borders."""
+    """Creates a polished card container with subtle borders and optional left accent stripe."""
+    if accent_color:
+        border = border_only(
+            left=ft.BorderSide(3, accent_color),
+            top=ft.BorderSide(1, border_color or COLORS["border"]),
+            right=ft.BorderSide(1, border_color or COLORS["border"]),
+            bottom=ft.BorderSide(1, border_color or COLORS["border"]),
+        )
+    else:
+        border = border_all(1, border_color or COLORS["border"])
+
     return ft.Container(
         content=content,
         padding=padding,
         border_radius=border_radius,
         bgcolor=bg_color or COLORS["bg_card"],
-        border=border_all(1, border_color or COLORS["border"]),
+        border=border,
         expand=expand,
         on_click=on_click,
+        shadow=ft.BoxShadow(
+            spread_radius=0,
+            blur_radius=12,
+            color=COLORS["shadow"],
+            offset=ft.Offset(0, 3),
+        ),
         animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT) if on_click else None,
+    )
+
+
+def section_card(
+    title: str,
+    subtitle: str,
+    controls: list,
+    icon: str = None,
+    accent_color: str = None,
+) -> ft.Container:
+    """Creates a polished settings-style section card with optional left accent bar."""
+    header_items = []
+    if icon:
+        header_items.append(icon_badge(icon, bg=accent_color or COLORS["primary"]))
+    header_items.append(
+        ft.Text(title, size=15, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"])
+    )
+
+    body = ft.Column([
+        ft.Row(header_items, spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        ft.Text(subtitle, size=12, color=COLORS["text_secondary"]),
+        ft.Divider(height=1, color=COLORS["border"]),
+        ft.Column(controls, spacing=12),
+    ], spacing=10)
+
+    border = border_only(
+        left=ft.BorderSide(3, accent_color or COLORS["primary"]),
+        top=ft.BorderSide(1, COLORS["border"]),
+        right=ft.BorderSide(1, COLORS["border"]),
+        bottom=ft.BorderSide(1, COLORS["border"]),
+    )
+
+    return ft.Container(
+        content=body,
+        bgcolor=COLORS["bg_card"],
+        border=border,
+        border_radius=12,
+        padding=20,
+        shadow=ft.BoxShadow(
+            spread_radius=0,
+            blur_radius=12,
+            color=COLORS["shadow"],
+            offset=ft.Offset(0, 3),
+        ),
+    )
+
+
+def pill_badge(
+    text: str,
+    bg_color: str,
+    text_color: str = "#FFFFFF",
+    size: int = 11,
+    icon: str = None,
+) -> ft.Container:
+    """Creates a small rounded pill badge with optional icon."""
+    row_items = []
+    if icon:
+        row_items.append(ft.Icon(icon, size=12, color=text_color))
+    row_items.append(
+        ft.Text(text, size=size, weight=ft.FontWeight.BOLD, color=text_color)
+    )
+    return ft.Container(
+        content=ft.Row(row_items, spacing=4, tight=True,
+                       vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        bgcolor=bg_color,
+        padding=padding_symmetric(horizontal=7, vertical=3),
+        border_radius=6,
+    )
+
+
+def status_dot(color: str, size: int = 8) -> ft.Container:
+    """Creates a small colored status indicator dot."""
+    return ft.Container(
+        width=size,
+        height=size,
+        border_radius=size // 2,
+        bgcolor=color,
+    )
+
+
+def empty_state(
+    icon: str,
+    title: str,
+    subtitle: str,
+    action_button: ft.Control = None,
+) -> ft.Container:
+    """Creates a polished empty state placeholder."""
+    controls = [
+        ft.Container(
+            content=ft.Icon(icon, size=28, color=COLORS["text_muted"]),
+            bgcolor=COLORS["badge_bg"],
+            padding=16,
+            border_radius=36,
+            width=60,
+            height=60,
+            alignment=align_center(),
+        ),
+        ft.Container(height=4),
+        ft.Text(title, size=16, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"],
+                text_align=ft.TextAlign.CENTER),
+        ft.Text(subtitle, size=12, color=COLORS["text_secondary"],
+                text_align=ft.TextAlign.CENTER),
+    ]
+    if action_button:
+        controls.append(ft.Container(height=4))
+        controls.append(action_button)
+
+    return ft.Container(
+        content=ft.Column(
+            controls,
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=6,
+        ),
+        alignment=align_center(),
+        padding=60,
     )

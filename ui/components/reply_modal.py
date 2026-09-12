@@ -4,7 +4,14 @@ GmailAI Assistant - AI Reply Assistant Dialog for Flet
 import threading
 import flet as ft
 from typing import Dict, Any, Optional, Callable
-from resources.styles.theme import COLORS, safe_update
+from resources.styles.theme import (
+    COLORS,
+    border_all,
+    border_only,
+    padding_symmetric,
+    padding_all,
+    safe_update,
+)
 from app.constants import ReplyTone
 from ai.reply_generator import reply_generator
 from gmail.actions import gmail_actions
@@ -48,7 +55,8 @@ class ReplyDialog(ft.AlertDialog):
             content_padding=10,
         )
 
-        self.spinner = ft.ProgressRing(width=18, height=18, stroke_width=2, color=COLORS["warning"], visible=True)
+        self.spinner = ft.ProgressRing(width=16, height=16, stroke_width=2, color=COLORS["warning"], visible=True)
+        self.status_icon = ft.Icon(ft.Icons.CHECK_CIRCLE, size=16, color=COLORS["success"], visible=False)
         self.status_text = ft.Text("AI is drafting your response...", size=12, color=COLORS["warning"], visible=True)
         self.char_count_text = ft.Text("0 chars", size=11, color=COLORS["text_muted"])
 
@@ -68,6 +76,7 @@ class ReplyDialog(ft.AlertDialog):
             icon=ft.Icons.AUTO_AWESOME,
             bgcolor=COLORS["primary"],
             color="#FFFFFF",
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
             disabled=True,
             on_click=lambda e: self._trigger_generation(),
         )
@@ -75,13 +84,39 @@ class ReplyDialog(ft.AlertDialog):
         self.draft_btn = ft.ElevatedButton(
             "Create Gmail Draft",
             icon=ft.Icons.SAVE_OUTLINED,
-            bgcolor=COLORS["success"],
+            bgcolor=COLORS["accent"],
             color="#FFFFFF",
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
             on_click=lambda e: self._save_draft(),
         )
 
         sender = self.email_data.get("sender_name") or self.email_data.get("sender", "Unknown")
         subject = self.email_data.get("subject", "(No Subject)")
+
+        reply_info = ft.Container(
+            content=ft.Column(
+                spacing=3,
+                controls=[
+                    ft.Row([
+                        ft.Text("Replying to:", size=11, color=COLORS["text_muted"], weight=ft.FontWeight.W_500),
+                        ft.Text(sender, weight=ft.FontWeight.BOLD, size=13, color=COLORS["text_primary"]),
+                    ], spacing=6),
+                    ft.Row([
+                        ft.Text("Subject:", size=11, color=COLORS["text_muted"], weight=ft.FontWeight.W_500),
+                        ft.Text(subject, size=12, color=COLORS["text_secondary"], no_wrap=True, expand=True),
+                    ], spacing=6),
+                ],
+            ),
+            bgcolor=COLORS["bg_card"],
+            border=border_only(
+                left=ft.BorderSide(3, COLORS["primary"]),
+                top=ft.BorderSide(1, COLORS["border"]),
+                right=ft.BorderSide(1, COLORS["border"]),
+                bottom=ft.BorderSide(1, COLORS["border"]),
+            ),
+            padding=padding_symmetric(horizontal=14, vertical=10),
+            border_radius=8,
+        )
 
         content = ft.Container(
             width=680,
@@ -89,18 +124,7 @@ class ReplyDialog(ft.AlertDialog):
                 tight=True,
                 spacing=14,
                 controls=[
-                    ft.Container(
-                        content=ft.Column(
-                            spacing=4,
-                            controls=[
-                                ft.Text(f"Replying to: {sender}", weight=ft.FontWeight.BOLD, size=14, color=COLORS["text_primary"]),
-                                ft.Text(f"Subject: {subject}", size=12, color=COLORS["text_secondary"], no_wrap=True),
-                            ],
-                        ),
-                        bgcolor=COLORS["bg_card_hover"],
-                        padding=12,
-                        border_radius=8,
-                    ),
+                    reply_info,
                     ft.Row(
                         controls=[
                             ft.Text("Tone:", size=13, weight=ft.FontWeight.W_600, color=COLORS["text_primary"]),
@@ -115,22 +139,35 @@ class ReplyDialog(ft.AlertDialog):
                     ft.Row(
                         controls=[
                             self.spinner,
+                            self.status_icon,
                             self.status_text,
                             ft.Container(expand=True),
                             self.char_count_text,
                         ],
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=8,
                     ),
                     self.reply_editor,
                 ],
             ),
         )
 
+        header = ft.Row([
+            ft.Container(
+                content=ft.Icon(ft.Icons.AUTO_AWESOME, color="#FFFFFF", size=18),
+                bgcolor=COLORS["primary"],
+                padding=6,
+                border_radius=8,
+                shadow=ft.BoxShadow(spread_radius=0, blur_radius=6, color=COLORS["primary"] + "40", offset=ft.Offset(0, 2)),
+            ),
+            ft.Column([
+                ft.Text("AI Reply Assistant", size=17, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
+                ft.Text("Generates context-aware, personalized email responses in 1 click", size=11, color=COLORS["text_secondary"]),
+            ], spacing=2),
+        ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
         super().__init__(
-            title=ft.Row([
-                ft.Icon(ft.Icons.AUTO_AWESOME, color=COLORS["primary"], size=22),
-                ft.Text("AI Reply Assistant", size=18, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
-            ]),
+            title=header,
             content=content,
             actions=[
                 ft.TextButton("Close", on_click=lambda e: self.close()),
@@ -139,6 +176,7 @@ class ReplyDialog(ft.AlertDialog):
             ],
             actions_alignment=ft.MainAxisAlignment.END,
             bgcolor=COLORS["bg_main"],
+            shape=ft.RoundedRectangleBorder(radius=12),
         )
 
         self._start_worker_generation()
@@ -154,6 +192,7 @@ class ReplyDialog(ft.AlertDialog):
 
     def _trigger_generation(self) -> None:
         self.spinner.visible = True
+        self.status_icon.visible = False
         self.status_text.visible = True
         self.status_text.value = "AI is drafting your response..."
         self.status_text.color = COLORS["warning"]
@@ -177,13 +216,27 @@ class ReplyDialog(ft.AlertDialog):
                 extra_instructions=notes if notes else None,
             )
 
-            self.reply_editor.value = draft
-            self.spinner.visible = False
-            self.status_text.value = "Draft ready"
-            self.status_text.color = COLORS["success"]
-            self.regen_btn.disabled = False
-            self.char_count_text.value = f"{len(draft.strip()):,} chars"
-            safe_update(self.page_ref)
+            async def _apply_draft():
+                self.reply_editor.value = draft
+                self.spinner.visible = False
+                self.status_icon.visible = True
+                self.status_text.value = "Draft ready for review"
+                self.status_text.color = COLORS["success"]
+                self.regen_btn.disabled = False
+                self.char_count_text.value = f"{len(draft.strip()):,} chars"
+                safe_update(self.page_ref)
+
+            try:
+                self.page_ref.run_task(_apply_draft)
+            except Exception:
+                self.reply_editor.value = draft
+                self.spinner.visible = False
+                self.status_icon.visible = True
+                self.status_text.value = "Draft ready for review"
+                self.status_text.color = COLORS["success"]
+                self.regen_btn.disabled = False
+                self.char_count_text.value = f"{len(draft.strip()):,} chars"
+                safe_update(self.page_ref)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -196,12 +249,15 @@ class ReplyDialog(ft.AlertDialog):
 
     def _save_draft(self) -> None:
         self.draft_btn.disabled = True
+        self.spinner.visible = True
+        self.status_icon.visible = False
         self.status_text.visible = True
         self.status_text.value = "Creating Gmail draft..."
         self.status_text.color = COLORS["warning"]
         safe_update(self.page_ref)
 
         def worker():
+            save_err = None
             try:
                 gmail_actions.create_draft(
                     recipient=self.email_data.get("sender", ""),
@@ -209,15 +265,40 @@ class ReplyDialog(ft.AlertDialog):
                     body_text=self.reply_editor.value or "",
                     thread_id=self.email_data.get("thread_id"),
                 )
-                self.status_text.value = "Gmail draft saved successfully!"
-                self.status_text.color = COLORS["success"]
-                if self.on_draft_created:
-                    self.on_draft_created(self.email_data.get("message_id", ""))
             except Exception as ex:
-                self.status_text.value = f"Saved locally: {ex}"
-                self.status_text.color = COLORS["warning"]
-            self.draft_btn.disabled = False
-            safe_update(self.page_ref)
+                save_err = ex
+
+            async def _apply_result():
+                self.spinner.visible = False
+                if save_err is None:
+                    self.status_icon.visible = True
+                    self.status_text.value = "Gmail draft saved successfully!"
+                    self.status_text.color = COLORS["success"]
+                    if self.on_draft_created:
+                        self.on_draft_created(self.email_data.get("message_id", ""))
+                else:
+                    self.status_icon.visible = False
+                    self.status_text.value = f"Saved locally: {save_err}"
+                    self.status_text.color = COLORS["warning"]
+                self.draft_btn.disabled = False
+                safe_update(self.page_ref)
+
+            try:
+                self.page_ref.run_task(_apply_result)
+            except Exception:
+                self.spinner.visible = False
+                if save_err is None:
+                    self.status_icon.visible = True
+                    self.status_text.value = "Gmail draft saved successfully!"
+                    self.status_text.color = COLORS["success"]
+                    if self.on_draft_created:
+                        self.on_draft_created(self.email_data.get("message_id", ""))
+                else:
+                    self.status_icon.visible = False
+                    self.status_text.value = f"Saved locally: {save_err}"
+                    self.status_text.color = COLORS["warning"]
+                self.draft_btn.disabled = False
+                safe_update(self.page_ref)
 
         threading.Thread(target=worker, daemon=True).start()
 

@@ -41,10 +41,13 @@ class AppConfigModel(BaseModel):
 
     # AI Router Settings
     ai_mode: str = "HYBRID"  # HYBRID, LOCAL_ONLY, CLOUD_ONLY, HEURISTIC
+    cloud_provider: str = "gemini"  # "gemini" or "openai"
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:latest"
     openai_model: str = "gpt-4o-mini"
     openai_api_key_encrypted: Optional[str] = None
+    gemini_model: str = "gemini-2.0-flash"
+    gemini_api_key_encrypted: Optional[str] = None
     hybrid_confidence_threshold: float = 0.85
 
     # Sync & Automation
@@ -60,7 +63,7 @@ class AppConfigModel(BaseModel):
 
     # UI Appearance
     ui_theme: str = "light"
-    accent_color: str = "#2563EB"
+    accent_color: str = "#7C3AED"
 
     # Paths
     credentials_path: Optional[str] = None
@@ -175,6 +178,31 @@ class ConfigManager:
             self._config.openai_api_key_encrypted = None
         else:
             self._config.openai_api_key_encrypted = security_manager.encrypt_data(api_key.strip())
+        self.save()
+
+    def get_gemini_api_key(self) -> Optional[str]:
+        """
+        Returns the Google Gemini API key.
+        Priority: GMAILAI_GEMINI_API_KEY env var > encrypted config storage.
+        """
+        env_key = os.environ.get("GMAILAI_GEMINI_API_KEY", "").strip()
+        if env_key:
+            return env_key
+
+        if not self._config.gemini_api_key_encrypted:
+            return None
+        try:
+            return security_manager.decrypt_data(self._config.gemini_api_key_encrypted)
+        except Exception as e:
+            logger.error(f"Failed to decrypt Gemini API key: {e}")
+            return None
+
+    def set_gemini_api_key(self, api_key: str) -> None:
+        """Encrypts and stores the Google Gemini API key."""
+        if not api_key:
+            self._config.gemini_api_key_encrypted = None
+        else:
+            self._config.gemini_api_key_encrypted = security_manager.encrypt_data(api_key.strip())
         self.save()
 
 

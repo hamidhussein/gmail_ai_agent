@@ -77,29 +77,29 @@ class DailyDigestGenerator:
         user_name = user_profile_manager.profile.name or "User"
         
         md_lines = [
-            f"### Good Morning, {user_name} ☀️\n",
+            f"### Executive Briefing — {user_name}\n",
             f"Here is your AI Inbox Executive Briefing for today:\n",
         ]
 
         if important_emails:
-            md_lines.append("#### 🌟 Top Priority Items:")
+            md_lines.append("#### Top Priority Items:")
             for e in important_emails[:4]:
                 md_lines.append(f"- **{e.sender_name or e.sender}**: {e.subject} *(Importance: {e.importance_score}/100)*")
             md_lines.append("")
 
         if need_reply_emails:
-            md_lines.append("#### ✉️ Urgent Replies Needed:")
+            md_lines.append("#### Urgent Replies Needed:")
             for e in need_reply_emails[:3]:
                 md_lines.append(f"- **{e.sender_name or e.sender}**: {e.subject}")
             md_lines.append("")
 
         if cleanup_emails:
-            md_lines.append("#### 🧹 Suggested Cleanup:")
+            md_lines.append("#### Suggested Cleanup:")
             md_lines.append(f"- **{len(cleanup_emails)} promotional & newsletter emails** ready for one-click archive.")
             md_lines.append("")
 
         if not important_emails and not need_reply_emails:
-            md_lines.append("Your inbox is calm today. No urgent escalations require your attention!")
+            md_lines.append("Your inbox is calm today. No urgent escalations require your attention.")
 
         return "\n".join(md_lines)
 

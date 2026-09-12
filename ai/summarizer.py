@@ -6,6 +6,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from ai.local_model import LocalOllamaClient
 from ai.cloud_model import CloudOpenAIClient
+from ai.gemini_model import CloudGeminiClient
 from app.config import config_manager
 
 logger = logging.getLogger("GmailAI.Summarizer")
@@ -29,8 +30,11 @@ class EmailSummarizer:
             base_url=config_manager.config.ollama_url,
             default_model=config_manager.config.ollama_model,
         )
-        self.cloud_client = CloudOpenAIClient(
+        self.openai_client = CloudOpenAIClient(
             default_model=config_manager.config.openai_model,
+        )
+        self.gemini_client = CloudGeminiClient(
+            default_model=config_manager.config.gemini_model,
         )
 
     def summarize(self, subject: str, sender: str, body_text: str) -> Dict[str, Any]:
@@ -45,14 +49,22 @@ class EmailSummarizer:
         except Exception:
             pass
 
-        # Try Cloud AI
-        if self.cloud_client.is_configured():
-            try:
-                res = self.cloud_client.generate_json(prompt, SUMMARIZE_SYSTEM_PROMPT)
-                if res and "summary" in res:
-                    return res
-            except Exception:
-                pass
+        # Try Cloud AI (prefer configured provider)
+        cloud_clients = []
+        provider = config_manager.config.cloud_provider.lower()
+        if provider == "gemini":
+            cloud_clients = [self.gemini_client, self.openai_client]
+        else:
+            cloud_clients = [self.openai_client, self.gemini_client]
+
+        for client in cloud_clients:
+            if client.is_configured():
+                try:
+                    res = client.generate_json(prompt, SUMMARIZE_SYSTEM_PROMPT)
+                    if res and "summary" in res:
+                        return res
+                except Exception:
+                    pass
 
         # Extractive fallback
         lines = [l.strip() for l in body_text.split("\n") if l.strip()]

@@ -11,10 +11,13 @@ from resources.styles.theme import (
     COLORS,
     get_category_color,
     border_all,
+    border_only,
     padding_all,
     padding_symmetric,
     safe_update,
     align_center,
+    empty_state,
+    pill_badge,
 )
 from ui.components.reply_modal import ReplyDialog
 from database.repository import repository
@@ -173,28 +176,28 @@ class InboxIntelligenceView(ft.Container):
                 content=ft.Row([
                     ft.Icon(
                         icon_name,
-                        size=14,
-                        color="#FFFFFF" if is_active else COLORS["text_secondary"],
+                        size=13,
+                        color=COLORS["chip_active_text"] if is_active else COLORS["text_muted"],
                     ),
                     ft.Text(
                         label,
                         size=12,
-                        weight=ft.FontWeight.W_600 if is_active else ft.FontWeight.W_500,
-                        color="#FFFFFF" if is_active else COLORS["text_secondary"],
+                        weight=ft.FontWeight.W_500,
+                        color=COLORS["chip_active_text"] if is_active else COLORS["text_secondary"],
                     ),
-                ], spacing=6, tight=True),
-                bgcolor=COLORS["primary"] if is_active else COLORS["bg_card"],
-                border=border_all(1, COLORS["primary"] if is_active else COLORS["border"]),
-                border_radius=20,
-                padding=padding_symmetric(horizontal=12, vertical=6),
+                ], spacing=5, tight=True),
+                bgcolor=COLORS["chip_active_bg"] if is_active else "transparent",
+                border=border_all(1, COLORS["border"]),
+                border_radius=100,
+                padding=padding_symmetric(horizontal=10, vertical=5),
                 on_click=lambda e, k=key: self._on_filter_click(k),
-                animate=ft.Animation(120, ft.AnimationCurve.EASE_OUT),
+                animate=ft.Animation(100, ft.AnimationCurve.EASE_OUT),
             )
             self.chip_controls.append((key, chip))
 
         self.filter_chips_row = ft.Row(
-            spacing=8,
-            scroll=ft.ScrollMode.AUTO,
+            spacing=6,
+            scroll=ft.ScrollMode.HIDDEN,
             controls=[c for _, c in self.chip_controls],
         )
 
@@ -207,19 +210,22 @@ class InboxIntelligenceView(ft.Container):
 
         # Right Column: Detail Reader Container
         self.detail_container = ft.Container(
-            content=ft.Column([
-                ft.Icon(ft.Icons.MARK_EMAIL_READ_OUTLINED, size=56, color=COLORS["text_muted"]),
-                ft.Text(
-                    "Select an email to view full conversation and AI intelligence",
-                    size=15,
-                    color=COLORS["text_secondary"],
-                ),
-            ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=14),
+            content=empty_state(
+                icon=ft.Icons.MARK_EMAIL_READ_OUTLINED,
+                title="Intelligence Reader",
+                subtitle="Select an email to view conversation details, AI triage insights, and action items.",
+            ),
             bgcolor=COLORS["bg_card"],
-            border=border_all(1, COLORS["border"]),
+            border=border_only(
+                left=ft.BorderSide(1, COLORS["border"]),
+                top=ft.BorderSide(1, COLORS["border"]),
+                right=ft.BorderSide(1, COLORS["border"]),
+                bottom=ft.BorderSide(1, COLORS["border"]),
+            ),
             border_radius=12,
-            padding=20,
-            expand=14,
+            padding=0,
+            expand=16,
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
         )
 
         content = ft.Column(
@@ -258,14 +264,14 @@ class InboxIntelligenceView(ft.Container):
 
                 # Split Master-Detail Layout
                 ft.Row([
-                    # Email List (10 parts)
+                    # Email List (8 parts)
                     ft.Container(
                         content=self.email_list_column,
-                        expand=10,
+                        expand=8,
                     ),
-                    # Email Detail Reader (14 parts)
+                    # Email Detail Reader (16 parts — more reading space)
                     self.detail_container,
-                ], expand=True, spacing=16, vertical_alignment=ft.CrossAxisAlignment.STRETCH),
+                ], expand=True, spacing=0, vertical_alignment=ft.CrossAxisAlignment.START),
             ],
         )
 
@@ -299,24 +305,17 @@ class InboxIntelligenceView(ft.Container):
         self.current_filter = filter_key
         for key, chip in self.chip_controls:
             is_active = (key == filter_key)
-            chip.bgcolor = COLORS["primary"] if is_active else COLORS["bg_card"]
-            chip.border = border_all(1, COLORS["primary"] if is_active else COLORS["border"])
+            chip.bgcolor = COLORS["chip_active_bg"] if is_active else "transparent"
+            chip.border = border_all(1, COLORS["border"])
             row = chip.content
-            row.controls[0].color = "#FFFFFF" if is_active else COLORS["text_secondary"]
-            row.controls[1].color = "#FFFFFF" if is_active else COLORS["text_secondary"]
-            row.controls[1].weight = ft.FontWeight.W_600 if is_active else ft.FontWeight.W_500
+            row.controls[0].color = COLORS["chip_active_text"] if is_active else COLORS["text_muted"]
+            row.controls[1].color = COLORS["chip_active_text"] if is_active else COLORS["text_secondary"]
+            row.controls[1].weight = ft.FontWeight.W_500
         safe_update(self.filter_chips_row)
         self.load_emails()
 
     def load_emails(self) -> None:
         """Loads emails from repository according to the active filter and search query."""
-        self.email_list_column.controls.clear()
-        self.card_refs.clear()
-        self.unread_dot_refs.clear()
-        self.subj_text_refs.clear()
-        self.sender_text_refs.clear()
-        self.star_btn_refs.clear()
-
         # Determine filter parameters
         category = None
         is_unread = None
@@ -329,34 +328,52 @@ class InboxIntelligenceView(ft.Container):
         elif self.current_filter != "ALL":
             category = self.current_filter
 
+        # Determine active account for mailbox scoping
+        account = repository.get_active_account()
+        active_account_id = account.id if account else None
+
         emails = repository.get_inbox_emails(
+            account_id=active_account_id,
             category=category,
             is_unread=is_unread,
             is_starred=is_starred,
             search_query=self.search_query if self.search_query else None,
             limit=100,
         )
+
+        # Check if rendered controls already match the fetched emails to avoid rebuilding cards
+        new_signatures = [(e.id, e.is_unread, getattr(e, "is_starred", False)) for e in emails]
+        existing_signatures = [
+            (getattr(e, "id", None), getattr(e, "is_unread", None), getattr(e, "is_starred", False))
+            for e in getattr(self, "emails_data", [])
+        ]
+        if self.email_list_column.controls and new_signatures == existing_signatures:
+            return
+
         self.emails_data = emails
+        self.email_list_column.controls.clear()
+        self.card_refs.clear()
+        self.unread_dot_refs.clear()
+        self.subj_text_refs.clear()
+        self.sender_text_refs.clear()
+        self.star_btn_refs.clear()
 
         count = len(emails)
         if count == 0:
             self.count_badge.value = "0 emails"
             self.email_list_column.controls.append(
-                ft.Container(
-                    content=ft.Column([
-                        ft.Icon(ft.Icons.INBOX_OUTLINED, size=52, color=COLORS["text_muted"]),
-                        ft.Text("No emails found", size=16, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
-                        ft.Text("Try selecting a different filter or clearing search.", size=12, color=COLORS["text_secondary"]),
-                    ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6),
-                    alignment=align_center(),
-                    padding=40,
+                empty_state(
+                    icon=ft.Icons.INBOX_OUTLINED,
+                    title="No emails found",
+                    subtitle="Try selecting a different filter or clearing search.",
                 )
             )
             # Empty reader state
-            self.detail_container.content = ft.Column([
-                ft.Icon(ft.Icons.MARK_EMAIL_READ_OUTLINED, size=56, color=COLORS["text_muted"]),
-                ft.Text("No email selected", size=15, color=COLORS["text_secondary"]),
-            ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=14)
+            self.detail_container.content = empty_state(
+                icon=ft.Icons.MARK_EMAIL_READ_OUTLINED,
+                title="No email selected",
+                subtitle="Select an email from the left list to read messages and AI intelligence.",
+            )
             safe_update(self.count_badge)
             safe_update(self.detail_container)
             safe_update(self.email_list_column)
@@ -383,8 +400,14 @@ class InboxIntelligenceView(ft.Container):
             # Highlight first card
             first_card = self.card_refs.get(first.id)
             if first_card:
+                first_cat_color = get_category_color(first.category)
                 first_card.bgcolor = COLORS["badge_bg"]
-                first_card.border = border_all(1, COLORS["primary"])
+                first_card.border = border_only(
+                    left=ft.BorderSide(3, first_cat_color),
+                    top=ft.BorderSide(1, COLORS["primary"]),
+                    right=ft.BorderSide(1, COLORS["primary"]),
+                    bottom=ft.BorderSide(1, COLORS["primary"]),
+                )
             self._render_email_detail(self.selected_email)
 
         safe_update(self.page_ref)
@@ -483,11 +506,11 @@ class InboxIntelligenceView(ft.Container):
                 # Left indicator & Avatar
                 unread_dot,
                 ft.Container(
-                    content=ft.Text(initials, size=11, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
+                    content=ft.Text(initials, size=10, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
                     bgcolor=avatar_bg,
-                    width=32,
-                    height=32,
-                    border_radius=16,
+                    width=28,
+                    height=28,
+                    border_radius=14,
                     alignment=align_center(),
                 ),
 
@@ -498,7 +521,7 @@ class InboxIntelligenceView(ft.Container):
                         ft.Row([
                             attachment_icon,
                             ft.Text(date_str, size=11, color=COLORS["text_muted"]),
-                        ], spacing=4, tight=True),
+                        ], spacing=3, tight=True),
                     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
 
                     subj_text,
@@ -512,32 +535,38 @@ class InboxIntelligenceView(ft.Container):
                     ),
                 ], expand=True, spacing=2),
 
-                # Right Badges Column & Star
+                # Right: category badge + star only (no score text)
                 ft.Column([
                     ft.Row([
                         ft.Container(
-                            content=ft.Text(cat, size=9, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
+                            content=ft.Text(cat[:6], size=9, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
                             bgcolor=cat_color,
-                            padding=padding_symmetric(horizontal=6, vertical=2),
+                            padding=padding_symmetric(horizontal=5, vertical=2),
                             border_radius=4,
                         ),
                         star_btn,
                     ], spacing=2, vertical_alignment=ft.CrossAxisAlignment.CENTER, tight=True),
-                    ft.Text(
-                        f"Score: {importance}",
-                        size=11,
-                        weight=ft.FontWeight.BOLD,
-                        color=COLORS["success"] if importance >= 75 else (COLORS["warning"] if importance >= 50 else COLORS["text_muted"]),
-                    ),
                 ], horizontal_alignment=ft.CrossAxisAlignment.END, spacing=2),
-            ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
+            ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=7),
             bgcolor=COLORS["badge_bg"] if is_selected else COLORS["bg_card"],
-            border=border_all(1, COLORS["primary"] if is_selected else COLORS["border"]),
-            border_radius=10,
-            padding=padding_symmetric(horizontal=12, vertical=10),
+            border=border_only(
+                left=ft.BorderSide(3, cat_color),
+                top=ft.BorderSide(1, COLORS["primary"] if is_selected else COLORS["border"]),
+                right=ft.BorderSide(1, COLORS["primary"] if is_selected else COLORS["border"]),
+                bottom=ft.BorderSide(1, COLORS["primary"] if is_selected else COLORS["border"]),
+            ),
+            border_radius=8,
+            padding=padding_symmetric(horizontal=10, vertical=8),
             on_click=lambda e, em=email: self._on_email_clicked(em),
-            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+            animate=ft.Animation(120, ft.AnimationCurve.EASE_OUT),
         )
+
+        def on_card_hover(e):
+            if not (self.selected_email and self.selected_email.get("id") == email.id):
+                card.bgcolor = COLORS["bg_card_hover"] if e.data == "true" else COLORS["bg_card"]
+                safe_update(card)
+
+        card.on_hover = on_card_hover
         self.card_refs[email.id] = card
         return card
 
@@ -549,15 +578,28 @@ class InboxIntelligenceView(ft.Container):
         # In-place style transition of previous card
         if prev_id and prev_id != new_id and prev_id in self.card_refs:
             prev_card = self.card_refs[prev_id]
+            prev_email = next((em for em in self.emails_data if em.id == prev_id), None)
+            prev_cat_color = get_category_color(prev_email.category) if prev_email else COLORS["border"]
             prev_card.bgcolor = COLORS["bg_card"]
-            prev_card.border = border_all(1, COLORS["border"])
+            prev_card.border = border_only(
+                left=ft.BorderSide(3, prev_cat_color),
+                top=ft.BorderSide(1, COLORS["border"]),
+                right=ft.BorderSide(1, COLORS["border"]),
+                bottom=ft.BorderSide(1, COLORS["border"]),
+            )
             safe_update(prev_card)
 
         # In-place style transition of active card
         if new_id in self.card_refs:
             active_card = self.card_refs[new_id]
+            active_cat_color = get_category_color(email.category)
             active_card.bgcolor = COLORS["badge_bg"]
-            active_card.border = border_all(1, COLORS["primary"])
+            active_card.border = border_only(
+                left=ft.BorderSide(3, active_cat_color),
+                top=ft.BorderSide(1, COLORS["primary"]),
+                right=ft.BorderSide(1, COLORS["primary"]),
+                bottom=ft.BorderSide(1, COLORS["primary"]),
+            )
             safe_update(active_card)
 
         # Mark as read in repo & actions in-place
@@ -644,8 +686,8 @@ class InboxIntelligenceView(ft.Container):
 
         if self.detail_star_btn:
             self.detail_star_btn.icon = ft.Icons.STAR if new_starred else ft.Icons.STAR_BORDER
-            self.detail_star_btn.text = "Starred" if new_starred else "Star"
-            self.detail_star_btn.style.color = COLORS["warning"] if new_starred else COLORS["text_secondary"]
+            self.detail_star_btn.icon_color = COLORS["warning"] if new_starred else COLORS["text_muted"]
+            self.detail_star_btn.tooltip = "Unstar" if new_starred else "Star"
             safe_update(self.detail_star_btn)
 
         msg = "Email starred" if new_starred else "Email unstarred"
@@ -685,7 +727,8 @@ class InboxIntelligenceView(ft.Container):
 
         if self.detail_read_btn:
             self.detail_read_btn.icon = ft.Icons.MARK_EMAIL_READ_OUTLINED if new_unread else ft.Icons.MARK_EMAIL_UNREAD_OUTLINED
-            self.detail_read_btn.text = "Mark as Read" if new_unread else "Mark as Unread"
+            self.detail_read_btn.icon_color = COLORS["text_secondary"]
+            self.detail_read_btn.tooltip = "Mark as Read" if new_unread else "Mark as Unread"
             safe_update(self.detail_read_btn)
 
         event_bus.publish(EVT_SUGGESTION_ACTIONED, 1)
@@ -759,141 +802,192 @@ class InboxIntelligenceView(ft.Container):
         )
 
         self.detail_container.content = ft.Column(
-            scroll=ft.ScrollMode.AUTO,
             expand=True,
-            spacing=16,
+            spacing=0,
             controls=[
-                # Top Action Bar
-                ft.Row([
-                    ft.ElevatedButton(
-                        "AI Reply Assistant",
-                        icon=ft.Icons.AUTO_AWESOME,
-                        bgcolor=COLORS["primary"],
-                        color="#FFFFFF",
-                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
-                        on_click=lambda e: self._open_reply_dialog(data),
-                    ),
-                    self.detail_star_btn,
-                    self.detail_read_btn,
-                    ft.OutlinedButton(
-                        "Archive",
-                        icon=ft.Icons.ARCHIVE_OUTLINED,
-                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
-                        on_click=lambda e: self._archive_email(data),
-                    ),
-                    ft.OutlinedButton(
-                        "Trash",
-                        icon=ft.Icons.DELETE_OUTLINE,
-                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8), color=COLORS["danger"]),
-                        on_click=lambda e: self._trash_email(data),
-                    ),
-                    ft.Container(expand=True),
-                    ft.IconButton(
-                        icon=ft.Icons.CONTENT_COPY,
-                        tooltip="Copy body to clipboard",
-                        icon_color=COLORS["text_secondary"],
-                        on_click=lambda e: self._copy_to_clipboard(body_content),
-                    ),
-                ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
-
-                # Subject Line
-                ft.Text(data.get("subject") or "(No Subject)", size=20, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
-
-                # Sender & Recipient Information Card
+                # Pinned Toolbar (non-scrollable)
                 ft.Container(
                     content=ft.Row([
-                        # Avatar
+                        ft.IconButton(
+                            icon=ft.Icons.AUTO_AWESOME,
+                            icon_size=18,
+                            icon_color=COLORS["primary"],
+                            tooltip="AI Reply Assistant",
+                            on_click=lambda e: self._open_reply_dialog(data),
+                        ),
+                        ft.Container(width=1, height=20, bgcolor=COLORS["border"]),
+                        ft.IconButton(
+                            ref=None,
+                            icon=ft.Icons.STAR if is_starred else ft.Icons.STAR_BORDER,
+                            icon_size=18,
+                            icon_color=COLORS["warning"] if is_starred else COLORS["text_muted"],
+                            tooltip="Star" if not is_starred else "Unstar",
+                            on_click=lambda e: self._toggle_star_from_detail(data),
+                        ),
+                        ft.IconButton(
+                            icon=ft.Icons.MARK_EMAIL_READ_OUTLINED if is_unread else ft.Icons.MARK_EMAIL_UNREAD_OUTLINED,
+                            icon_size=18,
+                            icon_color=COLORS["text_secondary"],
+                            tooltip="Mark as Read" if is_unread else "Mark as Unread",
+                            on_click=lambda e: self._toggle_read_status(data),
+                        ),
+                        ft.IconButton(
+                            icon=ft.Icons.ARCHIVE_OUTLINED,
+                            icon_size=18,
+                            icon_color=COLORS["text_secondary"],
+                            tooltip="Archive",
+                            on_click=lambda e: self._archive_email(data),
+                        ),
+                        ft.IconButton(
+                            icon=ft.Icons.DELETE_OUTLINE,
+                            icon_size=18,
+                            icon_color=COLORS["danger"],
+                            tooltip="Move to Trash",
+                            on_click=lambda e: self._trash_email(data),
+                        ),
+                        ft.Container(expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.CONTENT_COPY,
+                            icon_size=16,
+                            icon_color=COLORS["text_muted"],
+                            tooltip="Copy body to clipboard",
+                            on_click=lambda e: self._copy_to_clipboard(body_content),
+                        ),
+                    ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
+                    bgcolor=COLORS["surface_alt"],
+                    border=border_only(bottom=ft.BorderSide(1, COLORS["border"])),
+                    padding=padding_symmetric(horizontal=10, vertical=2),
+                ),
+
+                # Scrollable Content Area
+                ft.Column(
+                    scroll=ft.ScrollMode.AUTO,
+                    expand=True,
+                    spacing=12,
+                    controls=[
+                        # Subject Line
                         ft.Container(
-                            content=ft.Text(initials, size=15, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
-                            bgcolor=avatar_bg,
-                            width=44,
-                            height=44,
-                            border_radius=22,
-                            alignment=align_center(),
+                            content=ft.Text(data.get("subject") or "(No Subject)", size=18, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
+                            padding=padding_symmetric(horizontal=16, vertical=8),
                         ),
 
-                        # Sender Info
-                        ft.Column([
-                            ft.Row([
-                                ft.Text(sender_name, size=14, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
-                                ft.Text(f"<{sender_email}>", size=12, color=COLORS["text_muted"]),
-                            ], spacing=6, wrap=True),
-                            ft.Row([
-                                ft.Text(f"To: {recipient}", size=12, color=COLORS["text_secondary"]),
-                                ft.Text("•", color=COLORS["text_muted"], size=12),
-                                ft.Text(date_full, size=12, color=COLORS["text_secondary"]),
-                            ], spacing=6),
-                        ], expand=True, spacing=3),
+                        # Sender & Recipient Information Card
+                        ft.Container(
+                            content=ft.Row([
+                                # Avatar
+                                ft.Container(
+                                    content=ft.Text(initials, size=14, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
+                                    bgcolor=avatar_bg,
+                                    width=40,
+                                    height=40,
+                                    border_radius=20,
+                                    alignment=align_center(),
+                                ),
 
-                        # Category & Score Badges
-                        ft.Column([
-                            ft.Container(
-                                content=ft.Text(cat, size=10, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
-                                bgcolor=cat_color,
-                                padding=padding_symmetric(horizontal=8, vertical=3),
-                                border_radius=4,
-                            ),
-                            ft.Text(
-                                f"Score: {importance}/100",
-                                size=11,
-                                weight=ft.FontWeight.BOLD,
-                                color=COLORS["success"] if importance >= 75 else (COLORS["warning"] if importance >= 50 else COLORS["text_muted"]),
-                            ),
-                        ], horizontal_alignment=ft.CrossAxisAlignment.END, spacing=4),
-                    ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=12),
-                    bgcolor=COLORS["bg_card"],
-                    border=border_all(1, COLORS["border"]),
-                    border_radius=10,
-                    padding=14,
-                ),
+                                # Sender Info
+                                ft.Column([
+                                    ft.Text(sender_name, size=14, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
+                                    ft.Text(f"{sender_email}  \u2022  To: {recipient}", size=11, color=COLORS["text_muted"]),
+                                    ft.Text(date_full, size=11, color=COLORS["text_muted"]),
+                                ], expand=True, spacing=2),
 
-                # AI Intelligence Insights Card
-                ft.Container(
-                    content=ft.Column([
-                        ft.Row([
-                            ft.Icon(ft.Icons.AUTO_AWESOME, size=16, color=COLORS["badge_text"]),
-                            ft.Text("AI Intelligence & Insights", size=13, weight=ft.FontWeight.BOLD, color=COLORS["badge_text"]),
-                            ft.Container(expand=True),
-                            ft.Container(
-                                content=ft.Text(f"Action: {action}", size=10, weight=ft.FontWeight.BOLD, color=COLORS["primary"]),
-                                bgcolor=COLORS["bg_card"],
-                                border=border_all(1, COLORS["primary"]),
-                                padding=padding_symmetric(horizontal=8, vertical=2),
-                                border_radius=6,
+                                # Category & Score Badges
+                                ft.Column([
+                                    ft.Container(
+                                        content=ft.Text(cat, size=10, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
+                                        bgcolor=cat_color,
+                                        padding=padding_symmetric(horizontal=7, vertical=3),
+                                        border_radius=4,
+                                    ),
+                                    ft.Text(
+                                        f"{importance}/100",
+                                        size=11,
+                                        weight=ft.FontWeight.BOLD,
+                                        color=COLORS["success"] if importance >= 75 else (COLORS["warning"] if importance >= 50 else COLORS["text_muted"]),
+                                    ),
+                                ], horizontal_alignment=ft.CrossAxisAlignment.END, spacing=3),
+                            ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+                            bgcolor=COLORS["bg_card"],
+                            border=border_only(
+                                left=ft.BorderSide(3, cat_color),
+                                top=ft.BorderSide(1, COLORS["border"]),
+                                right=ft.BorderSide(1, COLORS["border"]),
+                                bottom=ft.BorderSide(1, COLORS["border"]),
                             ),
-                        ]),
-                        ft.Divider(height=1, color=COLORS["border"]),
-                        ft.Text(reasoning, size=12, color=COLORS["text_primary"]),
-                        ft.Row([
-                            ft.Text(f"⚡ Urgency: {urgency}/100", size=11, color=COLORS["text_secondary"], weight=ft.FontWeight.W_500),
-                            ft.Text("•", color=COLORS["text_muted"]),
-                            ft.Text(f"🛡️ Safety: {data.get('risk_level', 'LOW')}", size=11, color=COLORS["success"] if data.get("risk_level") == "LOW" else COLORS["danger"], weight=ft.FontWeight.W_500),
-                        ], spacing=8),
-                        ft.Column([
-                            ft.Text("Action Items Detected:", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_secondary"]),
-                            ft.Column(action_chips, spacing=6),
-                        ], visible=len(action_chips) > 0, spacing=6),
-                    ], spacing=10),
-                    bgcolor=COLORS["badge_bg"],
-                    border=border_all(1, COLORS["border"]),
-                    border_radius=10,
-                    padding=16,
-                ),
+                            border_radius=8,
+                            padding=12,
+                            margin=padding_symmetric(horizontal=16),
+                        ),
 
-                # Email Body Reader Container
-                ft.Container(
-                    content=ft.Markdown(
-                        body_content,
-                        selectable=True,
-                        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
-                    ),
-                    padding=20,
-                    bgcolor=COLORS["bg_card"],
-                    border=border_all(1, COLORS["border"]),
-                    border_radius=10,
+                        # AI Intelligence Insights Card
+                        ft.Container(
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Container(
+                                        content=ft.Icon(ft.Icons.AUTO_AWESOME, size=12, color="#FFFFFF"),
+                                        bgcolor=COLORS["primary"],
+                                        padding=4,
+                                        border_radius=5,
+                                    ),
+                                    ft.Text("AI Insights", size=12, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
+                                    ft.Container(expand=True),
+                                    ft.Container(
+                                        content=ft.Text(f"{action}", size=10, weight=ft.FontWeight.BOLD, color=COLORS["badge_text"]),
+                                        bgcolor=COLORS["badge_bg"],
+                                        padding=padding_symmetric(horizontal=7, vertical=2),
+                                        border_radius=5,
+                                    ),
+                                ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                                ft.Divider(height=1, color=COLORS["border"]),
+                                ft.Text(reasoning, size=12, color=COLORS["text_secondary"]),
+                                ft.Row([
+                                    ft.Icon(ft.Icons.BOLT_OUTLINED, size=12, color=COLORS["warning"]),
+                                    ft.Text(f"Urgency {urgency}", size=11, color=COLORS["text_muted"]),
+                                    ft.Text("\u2022", color=COLORS["text_muted"], size=10),
+                                    ft.Icon(ft.Icons.SHIELD_OUTLINED, size=12, color=COLORS["success"] if data.get("risk_level") == "LOW" else COLORS["danger"]),
+                                    ft.Text(f"Risk: {data.get('risk_level', 'LOW')}", size=11, color=COLORS["success"] if data.get("risk_level") == "LOW" else COLORS["danger"]),
+                                ], spacing=5),
+                                ft.Column([
+                                    ft.Text("Action Items:", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_muted"]),
+                                    ft.Column(action_chips, spacing=4),
+                                ], visible=len(action_chips) > 0, spacing=5),
+                            ], spacing=8),
+                            bgcolor=COLORS["surface_alt"],
+                            border=border_only(
+                                left=ft.BorderSide(3, COLORS["primary"]),
+                                top=ft.BorderSide(1, COLORS["border"]),
+                                right=ft.BorderSide(1, COLORS["border"]),
+                                bottom=ft.BorderSide(1, COLORS["border"]),
+                            ),
+                            border_radius=8,
+                            padding=14,
+                            margin=padding_symmetric(horizontal=16),
+                        ),
+
+                        # Email Body Reader Container
+                        ft.Container(
+                            content=ft.Markdown(
+                                body_content,
+                                selectable=True,
+                                extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                            ),
+                            padding=16,
+                            bgcolor=COLORS["bg_card"],
+                            border=border_all(1, COLORS["border"]),
+                            border_radius=8,
+                            margin=padding_symmetric(horizontal=16, vertical=4),
+                        ),
+                    ],
                 ),
             ],
         )
+        # Store button refs for live updates
+        toolbar = self.detail_container.content.controls[0].content
+        # Rebuild refs for star and read toggle buttons from the slim icon toolbar
+        star_btn_in_toolbar = toolbar.controls[2]  # star button is index 2
+        read_btn_in_toolbar = toolbar.controls[3]  # read button is index 3
+        self.detail_star_btn = star_btn_in_toolbar
+        self.detail_read_btn = read_btn_in_toolbar
         safe_update(self.detail_container)
 
     def _copy_to_clipboard(self, text: str) -> None:

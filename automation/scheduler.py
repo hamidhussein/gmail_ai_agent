@@ -138,7 +138,7 @@ class BackgroundScheduler:
                 saved = repository.save_or_update_email(email_dict)
 
                 # If cleanup suggested, create suggestion record
-                if saved.suggested_action in ["ARCHIVE", "MOVE_TRASH", "LABEL"]:
+                if saved.suggested_action in ["ARCHIVE", "MOVE_TRASH"]:
                     repository.create_suggestion(
                         email_id=saved.id,
                         action_type=saved.suggested_action,

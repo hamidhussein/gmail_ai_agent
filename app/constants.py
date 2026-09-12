@@ -38,6 +38,7 @@ class RiskLevel(str, Enum):
 class AISource(str, Enum):
     LOCAL_OLLAMA = "LOCAL_OLLAMA"
     CLOUD_OPENAI = "CLOUD_OPENAI"
+    CLOUD_GEMINI = "CLOUD_GEMINI"
     HEURISTIC_FALLBACK = "HEURISTIC_FALLBACK"
 
 

@@ -5,7 +5,8 @@ import json
 import logging
 import urllib.request
 import urllib.error
-from typing import Dict, Any, Optional, List
+import time
+from typing import Dict, Any, Optional, List, Tuple
 from core.exceptions import LocalModelUnavailableError
 
 logger = logging.getLogger("GmailAI.LocalModel")
@@ -14,19 +15,35 @@ logger = logging.getLogger("GmailAI.LocalModel")
 class LocalOllamaClient:
     """Communicates directly with the local Ollama daemon via REST API."""
 
+    _cached_availability: Dict[str, Tuple[float, bool]] = {}
+
     def __init__(self, base_url: str = "http://localhost:11434", default_model: str = "qwen2.5:latest"):
         self.base_url = base_url.rstrip("/")
         self.default_model = default_model
         self.timeout = 90  # seconds (allows model cold start and complex parsing)
 
-    def is_available(self) -> bool:
-        """Checks if the Ollama local daemon is running."""
+    def is_available(self, force_check: bool = False) -> bool:
+        """Checks if the Ollama local daemon is running with TTL caching."""
+        now = time.time()
+        cache_entry = self._cached_availability.get(self.base_url)
+        if not force_check and cache_entry is not None:
+            cached_time, is_ok = cache_entry
+            if now - cached_time < 15.0:  # 15-second TTL cache
+                return is_ok
+
         try:
-            url = f"{self.base_url}/api/tags"
+            # Bypass Windows IPv6 resolution latency for localhost
+            check_url = self.base_url
+            if "://localhost" in check_url:
+                check_url = check_url.replace("://localhost", "://127.0.0.1")
+            url = f"{check_url}/api/tags"
             req = urllib.request.Request(url, method="GET")
-            with urllib.request.urlopen(req, timeout=3) as resp:
-                return resp.status == 200
+            with urllib.request.urlopen(req, timeout=1.0) as resp:
+                is_ok = (resp.status == 200)
+                self._cached_availability[self.base_url] = (now, is_ok)
+                return is_ok
         except Exception:
+            self._cached_availability[self.base_url] = (now, False)
             return False
 
     def list_installed_models(self) -> List[str]:

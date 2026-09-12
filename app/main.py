@@ -14,6 +14,7 @@ from core.events import (
     EVT_TOAST_MESSAGE,
     EVT_THEME_CHANGED,
     EVT_ACCOUNT_CHANGED,
+    EVT_AUTH_REQUIRED,
     EVT_SUGGESTION_ACTIONED,
 )
 from database.repository import repository
@@ -26,6 +27,7 @@ from resources.styles.theme import (
     border_only,
     padding_all,
     padding_symmetric,
+    safe_update,
 )
 
 from ui.dashboard import DashboardView
@@ -54,25 +56,26 @@ class GmailAIApp:
         # Page configuration
         page.title = "GmailAI Assistant — Privacy-First Hybrid AI Platform"
         page.theme_mode = ft.ThemeMode.LIGHT if initial_theme == "light" else ft.ThemeMode.DARK
+        self._apply_page_theme()
         page.bgcolor = COLORS["bg_main"]
         page.padding = 0
-        page.window.width = 1260
-        page.window.height = 840
-        page.window.min_width = 1080
-        page.window.min_height = 700
+        page.window.width = 1280
+        page.window.height = 860
+        page.window.min_width = 1100
+        page.window.min_height = 720
 
         # Ensure demo data if database is empty
         self._init_data_if_needed()
-
-        # Start scheduler
-        scheduler.start()
-        page.on_disconnect = lambda e: scheduler.stop()
 
         # Build Sidebar Navigation & Main Container
         self._build_shell()
 
         # Subscribe to Event Bus
         self._register_events()
+
+        # Start background work only after UI event handlers are ready.
+        scheduler.start()
+        page.on_disconnect = lambda e: scheduler.stop()
 
         # Initial view
         self.show_view("dashboard")
@@ -138,6 +141,10 @@ class GmailAIApp:
             color=COLORS["text_secondary"],
         )
 
+        def on_theme_hover(e):
+            self.theme_btn.bgcolor = COLORS["bg_card_hover"] if e.data == "true" else COLORS["bg_card"]
+            safe_update(self.theme_btn)
+
         self.theme_btn = ft.Container(
             content=ft.Row([
                 self.theme_icon,
@@ -148,11 +155,17 @@ class GmailAIApp:
             border=border_all(1, COLORS["border"]),
             border_radius=8,
             on_click=lambda e: self.toggle_theme(),
+            on_hover=on_theme_hover,
+            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
         )
 
         # User Status Footer Pill / Google Sign In Prompt
         self.user_email_text = ft.Text("Demo Account", size=12, color=COLORS["text_secondary"], no_wrap=True)
         self.online_dot = ft.Container(width=8, height=8, border_radius=4, bgcolor=COLORS["success"])
+
+        def on_footer_hover(e):
+            self.user_footer.bgcolor = COLORS["bg_card_hover"] if e.data == "true" else COLORS["bg_card"]
+            safe_update(self.user_footer)
 
         self.user_footer = ft.Container(
             content=ft.Row([
@@ -167,11 +180,13 @@ class GmailAIApp:
             border_radius=10,
             tooltip="Click to manage or switch Google account",
             on_click=lambda e: self.open_google_auth_dialog(),
+            on_hover=on_footer_hover,
+            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
         )
 
         # Sidebar Container
         self.sidebar = ft.Container(
-            width=240,
+            width=220,
             bgcolor=COLORS["bg_sidebar"],
             border=border_only(right=ft.BorderSide(1, COLORS["border"])),
             padding=padding_symmetric(horizontal=14, vertical=20),
@@ -181,17 +196,24 @@ class GmailAIApp:
                     ft.Container(
                         content=ft.Icon(ft.Icons.ALL_INCLUSIVE, size=20, color="#FFFFFF"),
                         bgcolor=COLORS["primary"],
-                        padding=6,
-                        border_radius=8,
+                        padding=7,
+                        border_radius=10,
+                        shadow=ft.BoxShadow(spread_radius=0, blur_radius=6, color=COLORS["primary"] + "40", offset=ft.Offset(0, 2)),
                     ),
-                    ft.Text("GmailAI", size=18, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
-                    ft.Container(
-                        content=ft.Text("PRO", size=10, weight=ft.FontWeight.BOLD, color=COLORS["badge_text"]),
-                        bgcolor=COLORS["badge_bg"],
-                        padding=padding_symmetric(horizontal=6, vertical=2),
-                        border_radius=4,
-                    ),
-                ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
+                    ft.Column([
+                        ft.Row([
+                            ft.Text("GmailAI", size=17, weight=ft.FontWeight.BOLD, color=COLORS["sidebar_text"]),
+                            ft.Container(
+                                content=ft.Text("PRO", size=9, weight=ft.FontWeight.BOLD, color=COLORS["primary"]),
+                                bgcolor=COLORS["badge_bg"],
+                                border=border_all(1, COLORS["primary"] + "40"),
+                                padding=padding_symmetric(horizontal=5, vertical=1),
+                                border_radius=4,
+                            ),
+                        ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                        ft.Text("Autonomous Intelligence", size=10, color=COLORS["sidebar_muted"]),
+                    ], spacing=1),
+                ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
 
                 ft.Container(height=16),
 
@@ -222,24 +244,34 @@ class GmailAIApp:
 
     def _build_nav_btn(self, key: str, label: str, icon_name: str, badge: ft.Container = None) -> ft.Container:
         row_items = [
-            ft.Icon(icon_name, size=18, color=COLORS["text_secondary"]),
-            ft.Text(label, size=13, weight=ft.FontWeight.W_600, color=COLORS["text_secondary"], expand=True),
+            ft.Icon(icon_name, size=18, color=COLORS["sidebar_muted"]),
+            ft.Text(label, size=12, weight=ft.FontWeight.W_500, color=COLORS["sidebar_muted"], expand=True),
         ]
         if badge:
             row_items.append(badge)
 
+        def on_nav_hover(e):
+            if key != self.current_tab:
+                container.bgcolor = COLORS["sidebar_hover"] if e.data == "true" else None
+                safe_update(container)
+
         container = ft.Container(
             content=ft.Row(row_items, alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
-            padding=padding_symmetric(horizontal=12, vertical=10),
+            padding=padding_symmetric(horizontal=10, vertical=9),
             border_radius=8,
             on_click=lambda e, k=key: self.show_view(k),
-            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+            on_hover=on_nav_hover,
+            animate=ft.Animation(120, ft.AnimationCurve.EASE_OUT),
         )
         return container
 
-    def open_google_auth_dialog(self) -> None:
+    def open_google_auth_dialog(self, reason: str = "", email: str = "") -> None:
         """Opens the 1-click Google Sign-In dialog modal."""
-        dialog = GoogleAuthDialog(page=self.page, on_authenticated=self._on_account_changed)
+        dialog = GoogleAuthDialog(
+            page=self.page,
+            reason=reason,
+            account_email=email,
+        )
         try:
             self.page.open(dialog)
         except Exception:
@@ -254,6 +286,7 @@ class GmailAIApp:
 
         is_light = (new_theme == "light")
         self.page.theme_mode = ft.ThemeMode.LIGHT if is_light else ft.ThemeMode.DARK
+        self._apply_page_theme()
         self.page.bgcolor = COLORS["bg_main"]
 
         self.theme_icon.name = ft.Icons.DARK_MODE_OUTLINED if is_light else ft.Icons.LIGHT_MODE_OUTLINED
@@ -262,6 +295,13 @@ class GmailAIApp:
         # Update sidebar styling
         self.sidebar.bgcolor = COLORS["bg_sidebar"]
         self.sidebar.border = border_only(right=ft.BorderSide(1, COLORS["border"]))
+        self.theme_btn.bgcolor = COLORS["bg_card"]
+        self.theme_btn.border = border_all(1, COLORS["border"])
+        self.user_footer.bgcolor = COLORS["bg_card"]
+        self.user_footer.border = border_all(1, COLORS["border"])
+        self.theme_icon.color = COLORS["text_secondary"]
+        self.theme_label.color = COLORS["text_secondary"]
+        self.user_email_text.color = COLORS["text_secondary"]
 
         # Invalidate views to re-render in new theme palette
         self.views.clear()
@@ -271,16 +311,22 @@ class GmailAIApp:
         """Swaps active view in the main content container with view caching."""
         self.current_tab = tab_key
 
-        # Update sidebar styling
+        # Update sidebar styling and filled/outline icons
         for key, btn in self.nav_buttons.items():
             is_active = (key == tab_key)
-            btn.bgcolor = COLORS["primary"] if is_active else None
+            # Use subtle dark fill + left accent line — less heavy than full primary
+            btn.bgcolor = COLORS["nav_active_bg"] if is_active else None
+            btn.border = border_only(left=ft.BorderSide(3, COLORS["primary"])) if is_active else None
             row = btn.content
-            row.controls[0].color = "#FFFFFF" if is_active else COLORS["text_secondary"]
-            row.controls[1].color = "#FFFFFF" if is_active else COLORS["text_secondary"]
+            nav_item = next((item for item in self.nav_items if item[0] == key), None)
+            if nav_item:
+                row.controls[0].name = nav_item[3] if is_active else nav_item[2]
+            row.controls[0].color = "#FFFFFF" if is_active else COLORS["sidebar_muted"]
+            row.controls[1].color = "#FFFFFF" if is_active else COLORS["sidebar_muted"]
 
         # Load or retrieve cached view
-        if tab_key not in self.views:
+        is_cached = tab_key in self.views
+        if not is_cached:
             if tab_key == "dashboard":
                 view = DashboardView(page=self.page, on_navigate=self.show_view)
             elif tab_key == "inbox":
@@ -299,47 +345,92 @@ class GmailAIApp:
             self.views[tab_key] = view
         else:
             view = self.views[tab_key]
-            if hasattr(view, "refresh_data"):
-                try:
-                    view.refresh_data()
-                except Exception as ex:
-                    logger.warning(f"Error during refresh_data on view {tab_key}: {ex}")
 
+        # Mount view and update layout immediately for zero-lag tab transitions
         self.content_area.content = view
-        self._update_badges()
-        self.page.update()
+        self._update_badges(update_controls=False)
+        try:
+            self.page.update()
+        except Exception:
+            pass
 
-    def _update_badges(self) -> None:
-        stats = repository.get_inbox_stats()
-        cleanup_count = stats.get("cleanup_suggested_emails", 0)
+        # If cached, refresh data smoothly after the tab transition
+        if is_cached and hasattr(view, "refresh_data"):
+            try:
+                view.refresh_data()
+            except Exception as ex:
+                logger.warning(f"Error during refresh_data on view {tab_key}: {ex}")
 
-        if cleanup_count > 0:
-            self.cleanup_badge_text.value = str(cleanup_count)
-            self.cleanup_badge_container.visible = True
-        else:
-            self.cleanup_badge_container.visible = False
+    def _update_badges(self, update_controls: bool = True) -> None:
+        try:
+            account = repository.get_active_account()
+            stats = repository.get_inbox_stats(account_id=account.id) if account else {
+                "cleanup_suggested_emails": 0,
+                "unread_emails": 0,
+            }
+            cleanup_count = stats.get("cleanup_suggested_emails", 0)
 
-        unread_count = stats.get("unread_emails", 0)
-        if unread_count > 0:
-            self.inbox_badge_text.value = str(unread_count)
-            self.inbox_badge_container.visible = True
-        else:
-            self.inbox_badge_container.visible = False
+            if cleanup_count > 0:
+                self.cleanup_badge_text.value = str(cleanup_count)
+                self.cleanup_badge_container.visible = True
+            else:
+                self.cleanup_badge_container.visible = False
 
-        account = repository.get_active_account()
-        if account:
-            self.user_email_text.value = account.email
-            self.online_dot.bgcolor = COLORS["success"]
-        else:
-            self.user_email_text.value = "Demo Mode (Sign In)"
-            self.online_dot.bgcolor = COLORS["warning"]
+            unread_count = stats.get("unread_emails", 0)
+            if unread_count > 0:
+                self.inbox_badge_text.value = str(unread_count)
+                self.inbox_badge_container.visible = True
+            else:
+                self.inbox_badge_container.visible = False
+
+            if account:
+                self.user_email_text.value = account.email
+                self.online_dot.bgcolor = COLORS["success"]
+            else:
+                self.user_email_text.value = "Demo Mode (Sign In)"
+                self.online_dot.bgcolor = COLORS["warning"]
+
+            if update_controls:
+                safe_update(self.cleanup_badge_container)
+                safe_update(self.inbox_badge_container)
+                safe_update(self.user_footer)
+        except Exception as ex:
+            logger.debug(f"Error updating badges: {ex}")
+
+    def _dispatch_ui(self, func, *args, **kwargs) -> None:
+        """Schedules UI mutations on the Flet event loop thread-safely."""
+        async def _coro():
+            try:
+                func(*args, **kwargs)
+            except Exception as e:
+                logger.error(
+                    f"Error in UI dispatch for {getattr(func, '__name__', str(func))}: {e}",
+                    exc_info=True,
+                )
+
+        try:
+            self.page.run_task(_coro)
+        except Exception:
+            try:
+                func(*args, **kwargs)
+            except Exception as e:
+                logger.debug(f"UI dispatch fallback failed: {e}")
 
     def _register_events(self) -> None:
-        event_bus.subscribe(EVT_SYNC_COMPLETED, lambda data: self._on_sync_event(data))
-        event_bus.subscribe(EVT_SUGGESTION_ACTIONED, lambda data: self._on_sync_event(data))
-        event_bus.subscribe(EVT_TOAST_MESSAGE, lambda msg: self._show_toast(str(msg)))
-        event_bus.subscribe(EVT_THEME_CHANGED, lambda theme: self._on_theme_event(theme))
-        event_bus.subscribe(EVT_ACCOUNT_CHANGED, lambda email: self._on_account_changed(email))
+        event_bus.subscribe(EVT_SYNC_COMPLETED, lambda data: self._dispatch_ui(self._on_sync_event, data))
+        event_bus.subscribe(EVT_SUGGESTION_ACTIONED, lambda data: self._dispatch_ui(self._on_sync_event, data))
+        event_bus.subscribe(EVT_TOAST_MESSAGE, lambda msg: self._dispatch_ui(self._show_toast, str(msg)))
+        event_bus.subscribe(EVT_THEME_CHANGED, lambda theme: self._dispatch_ui(self._on_theme_event, theme))
+        event_bus.subscribe(EVT_ACCOUNT_CHANGED, lambda email: self._dispatch_ui(self._on_account_changed, email))
+        event_bus.subscribe(EVT_AUTH_REQUIRED, lambda data: self._dispatch_ui(self._on_auth_required, data))
+
+    def _on_auth_required(self, data) -> None:
+        """Handles revoked-token / reauthentication recovery dialog."""
+        payload = data if isinstance(data, dict) else {}
+        self.open_google_auth_dialog(
+            reason=payload.get("reason", "Google authorization is required."),
+            email=payload.get("email", ""),
+        )
 
     def _on_account_changed(self, email: str) -> None:
         """Called when a user signs in with Google."""
@@ -356,6 +447,7 @@ class GmailAIApp:
     def _on_theme_event(self, new_theme: str) -> None:
         is_light = (new_theme == "light")
         self.page.theme_mode = ft.ThemeMode.LIGHT if is_light else ft.ThemeMode.DARK
+        self._apply_page_theme()
         self.page.bgcolor = COLORS["bg_main"]
 
         self.theme_icon.name = ft.Icons.DARK_MODE_OUTLINED if is_light else ft.Icons.LIGHT_MODE_OUTLINED
@@ -367,11 +459,71 @@ class GmailAIApp:
         self.views.clear()
         self.show_view(self.current_tab)
 
+    def _apply_page_theme(self) -> None:
+        """Apply branded Material defaults so controls never fall back to blue."""
+        rounded = ft.RoundedRectangleBorder(radius=10)
+        self.page.theme = ft.Theme(
+            use_material3=True,
+            font_family="Segoe UI",
+            color_scheme=ft.ColorScheme(
+                primary=COLORS["primary"],
+                on_primary="#FFFFFF",
+                primary_container=COLORS["primary_soft"],
+                on_primary_container=COLORS["badge_text"],
+                secondary=COLORS["secondary"],
+                on_secondary="#FFFFFF",
+                tertiary=COLORS["accent"],
+                on_tertiary="#FFFFFF",
+                error=COLORS["danger"],
+                surface=COLORS["bg_card"],
+                on_surface=COLORS["text_primary"],
+                outline=COLORS["border_hover"],
+            ),
+            button_theme=ft.ButtonTheme(
+                style=ft.ButtonStyle(
+                    bgcolor=COLORS["primary"],
+                    color="#FFFFFF",
+                    elevation=0,
+                    padding=padding_symmetric(horizontal=18, vertical=12),
+                    shape=rounded,
+                )
+            ),
+            outlined_button_theme=ft.OutlinedButtonTheme(
+                style=ft.ButtonStyle(
+                    color=COLORS["primary"],
+                    side=ft.BorderSide(1, COLORS["border_hover"]),
+                    shape=rounded,
+                )
+            ),
+            text_button_theme=ft.TextButtonTheme(
+                style=ft.ButtonStyle(color=COLORS["primary"], shape=rounded)
+            ),
+        )
+
     def _on_sync_event(self, data) -> None:
-        self.views.pop("dashboard", None)
+        """Smoothly refreshes active and cached views in-place without destroying UI hierarchy."""
         self._update_badges()
-        if self.current_tab == "dashboard":
-            self.show_view("dashboard")
+
+        # Smooth in-place refresh of currently visible view
+        active_view = self.views.get(self.current_tab)
+        if active_view and hasattr(active_view, "refresh_data"):
+            try:
+                active_view.refresh_data()
+            except Exception as ex:
+                logger.warning(f"Error during smooth refresh of active view {self.current_tab}: {ex}")
+
+        # Keep all other cached views up-to-date so tab switching is instant and accurate
+        for key, view in self.views.items():
+            if key != self.current_tab and hasattr(view, "refresh_data"):
+                try:
+                    view.refresh_data()
+                except Exception:
+                    pass
+
+        try:
+            self.page.update()
+        except Exception:
+            pass
 
     def _show_toast(self, message: str) -> None:
         try:

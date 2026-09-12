@@ -64,9 +64,9 @@ EVT_SUGGESTION_CREATED = "suggestion:created"
 EVT_SUGGESTION_ACTIONED = "suggestion:actioned"
 
 EVT_ACCOUNT_CHANGED = "account:changed"
+EVT_AUTH_REQUIRED = "account:auth_required"
 EVT_SETTINGS_CHANGED = "settings:changed"
 EVT_THEME_CHANGED = "theme:changed"
 EVT_TOAST_MESSAGE = "ui:toast"
 
 event_bus = EventBus()
-

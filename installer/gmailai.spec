@@ -12,12 +12,21 @@ added_files = [
 # Collect Flet runtime assets and modules
 try:
     added_files += collect_data_files('flet')
-except Exception:
-    pass
+except Exception as ex:
+    print(f"Warning: Failed to collect flet data files: {ex}")
+
+try:
+    added_files += collect_data_files('flet_desktop')
+except Exception as ex:
+    print(f"Warning: Failed to collect flet_desktop data files: {ex}")
 
 hidden_imports = [
     'flet',
+    'flet_desktop',
+    'database.migration_runner',
+    'core.error_reporter',
     'sqlalchemy',
+    'sqlalchemy.dialects.sqlite',
     'sqlalchemy.sql.default_comparator',
     'sqlalchemy.ext.baked',
     'cryptography',
@@ -35,8 +44,8 @@ hidden_imports = [
 
 try:
     hidden_imports += collect_submodules('flet')
-except Exception:
-    pass
+except Exception as ex:
+    print(f"Warning: Failed to collect flet submodules: {ex}")
 
 a = Analysis(
     ['../run.py'],

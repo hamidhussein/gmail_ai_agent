@@ -3,11 +3,17 @@ GmailAI Assistant - Metric Stat Card Component for Flet
 """
 import flet as ft
 from typing import Optional
-from resources.styles.theme import COLORS, border_all, safe_update
+from resources.styles.theme import (
+    COLORS,
+    border_all,
+    border_only,
+    padding_symmetric,
+    safe_update,
+)
 
 
 class StatCard(ft.Container):
-    """Modern glassmorphic stat card widget with hover elevation and accent glowing border."""
+    """Modern stat card widget with left accent stripe, hover glow, and refined typography."""
 
     def __init__(
         self,
@@ -15,13 +21,13 @@ class StatCard(ft.Container):
         value: str,
         icon: str = ft.Icons.ANALYTICS_OUTLINED,
         trend: Optional[str] = None,
-        accent_color: str = "#2563EB",
+        accent_color: str = "#7C3AED",
         expand: bool = True,
         **kwargs,
     ):
         self.value_text = ft.Text(
             value,
-            size=28,
+            size=26,
             weight=ft.FontWeight.BOLD,
             color=COLORS["text_primary"],
         )
@@ -32,48 +38,54 @@ class StatCard(ft.Container):
                 ft.Row(
                     controls=[
                         ft.Container(
-                            content=ft.Icon(icon, size=18, color=accent_color),
-                            bgcolor=COLORS["bg_card_hover"],
-                            padding=8,
-                            border_radius=8,
+                            content=ft.Icon(icon, size=14, color="#FFFFFF"),
+                            bgcolor=accent_color,
+                            padding=6,
+                            border_radius=7,
                         ),
                         ft.Text(
-                            title.upper(),
-                            size=12,
+                            title,
+                            size=11,
                             weight=ft.FontWeight.W_600,
-                            color=COLORS["text_secondary"],
+                            color=COLORS["text_muted"],
                         ),
                     ],
                     alignment=ft.MainAxisAlignment.START,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=10,
+                    spacing=8,
                 ),
                 self.value_text,
                 ft.Text(
                     trend or "",
-                    size=12,
-                    color=accent_color if trend else COLORS["text_muted"],
-                    weight=ft.FontWeight.W_500,
+                    size=11,
+                    color=COLORS["text_muted"],
+                    weight=ft.FontWeight.W_400,
                 ),
             ],
-            spacing=8,
+            spacing=5,
         )
 
         super().__init__(
             content=content,
             bgcolor=COLORS["bg_card"],
-            border=border_all(1, COLORS["border"]),
+            border=border_only(
+                left=ft.BorderSide(3, accent_color),
+                top=ft.BorderSide(1, COLORS["border"]),
+                right=ft.BorderSide(1, COLORS["border"]),
+                bottom=ft.BorderSide(1, COLORS["border"]),
+            ),
             border_radius=12,
-            padding=16,
+            padding=padding_symmetric(horizontal=16, vertical=14),
             expand=expand,
-            animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
+            animate=ft.Animation(180, ft.AnimationCurve.EASE_OUT),
             on_hover=self._on_hover,
             **kwargs,
         )
 
     def _on_hover(self, e):
-        self.border = border_all(1, self.accent_color if e.data == "true" else COLORS["border"])
-        self.bgcolor = COLORS["bg_card_hover"] if e.data == "true" else COLORS["bg_card"]
+        is_hovered = e.data == "true"
+        # Only change background on hover — avoid distracting border color changes
+        self.bgcolor = COLORS["bg_card_hover"] if is_hovered else COLORS["bg_card"]
         safe_update(self)
 
     def set_value(self, new_val: str) -> None:
