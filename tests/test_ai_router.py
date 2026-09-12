@@ -33,4 +33,4 @@ def test_hybrid_router_fallback():
     result, source = router.classify_email(email_data)
     assert result["category"] in ["PROMOTION", "ADVERTISEMENT"]
     assert result["suggested_action"] == "ARCHIVE"
-    assert source in [AISource.HEURISTIC_FALLBACK, AISource.LOCAL_OLLAMA, AISource.CLOUD_OPENAI]
+    assert source in [AISource.HEURISTIC_FALLBACK, AISource.LOCAL_OLLAMA, AISource.CLOUD_OPENAI, AISource.CLOUD_GEMINI]

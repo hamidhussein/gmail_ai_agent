@@ -46,7 +46,7 @@ class AppConfigModel(BaseModel):
     ollama_model: str = "qwen2.5:latest"
     openai_model: str = "gpt-4o-mini"
     openai_api_key_encrypted: Optional[str] = None
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-3.6-flash"
     gemini_api_key_encrypted: Optional[str] = None
     hybrid_confidence_threshold: float = 0.85
 
@@ -108,6 +108,14 @@ class ConfigManager:
             try:
                 with open(self.config_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
+                # Auto-upgrade deprecated Gemini models
+                if data.get("gemini_model") in ("gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"):
+                    data["gemini_model"] = "gemini-3.6-flash"
+                    try:
+                        with open(self.config_file, "w", encoding="utf-8") as f_out:
+                            json.dump(data, f_out, indent=2)
+                    except Exception:
+                        pass
                 return AppConfigModel(**data)
             except Exception as e:
                 logger.warning(f"Failed to load config from {self.config_file}, using defaults: {e}")
