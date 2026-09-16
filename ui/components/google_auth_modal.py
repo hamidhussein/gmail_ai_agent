@@ -44,7 +44,7 @@ class GoogleAuthDialog(ft.AlertDialog):
             text_align=ft.TextAlign.CENTER,
         )
 
-        has_creds = credential_manager.get_client_config() is not None
+        has_creds = credential_manager.is_configured()
 
         # Sign-in button (Google Blue style)
         google_action = COLORS["primary"]
@@ -165,15 +165,20 @@ class GoogleAuthDialog(ft.AlertDialog):
         if self.is_authenticating:
             return
 
-        # Check if credentials exist or if user pasted them
-        has_creds = credential_manager.get_client_config() is not None
+        # Check if valid credentials exist or if user pasted them
+        has_creds = credential_manager.is_configured()
         pasted_text = (self.creds_paste_field.value or "").strip()
 
         if not has_creds:
             if pasted_text:
                 try:
                     credential_manager.save_client_config_from_json(pasted_text)
-                    has_creds = True
+                    has_creds = credential_manager.is_configured()
+                    if not has_creds:
+                        self.status_text.value = "Saved credentials still appear invalid or placeholder."
+                        self.status_text.color = COLORS["danger"]
+                        safe_update(self.status_text)
+                        return
                 except Exception as ex:
                     self.status_text.value = f"Invalid credentials: {ex}"
                     self.status_text.color = COLORS["danger"]

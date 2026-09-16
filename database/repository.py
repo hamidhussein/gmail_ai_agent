@@ -633,10 +633,17 @@ class Repository:
         finally:
             session.close()
 
-    def get_recent_audit_logs(self, limit: int = 50) -> List[ActionAuditLog]:
+    def get_recent_audit_logs(
+        self,
+        limit: int = 50,
+        account_email: Optional[str] = None,
+    ) -> List[ActionAuditLog]:
         session = self.get_session()
         try:
-            return session.query(ActionAuditLog).order_by(desc(ActionAuditLog.executed_at)).limit(limit).all()
+            q = session.query(ActionAuditLog)
+            if account_email:
+                q = q.filter(ActionAuditLog.account_email == account_email)
+            return q.order_by(desc(ActionAuditLog.executed_at)).limit(limit).all()
         finally:
             session.close()
 
@@ -652,12 +659,19 @@ class Repository:
         cleanup_suggested_count: int,
         summary_markdown: str,
         stats_json: str = "{}",
+        account_id: Optional[int] = None,
     ) -> DailyDigestRecord:
         session = self.get_session()
         try:
-            rec = session.query(DailyDigestRecord).filter_by(digest_date=digest_date).first()
+            q = session.query(DailyDigestRecord).filter_by(digest_date=digest_date)
+            if account_id is not None:
+                q = q.filter_by(account_id=account_id)
+            else:
+                q = q.filter(DailyDigestRecord.account_id.is_(None))
+            rec = q.first()
             if not rec:
                 rec = DailyDigestRecord(
+                    account_id=account_id,
                     digest_date=digest_date,
                     total_emails=total_emails,
                     important_count=important_count,
@@ -686,10 +700,13 @@ class Repository:
         finally:
             session.close()
 
-    def get_latest_daily_digest(self) -> Optional[DailyDigestRecord]:
+    def get_latest_daily_digest(self, account_id: Optional[int] = None) -> Optional[DailyDigestRecord]:
         session = self.get_session()
         try:
-            return session.query(DailyDigestRecord).order_by(desc(DailyDigestRecord.digest_date)).first()
+            q = session.query(DailyDigestRecord)
+            if account_id is not None:
+                q = q.filter(DailyDigestRecord.account_id == account_id)
+            return q.order_by(desc(DailyDigestRecord.digest_date)).first()
         finally:
             session.close()
 

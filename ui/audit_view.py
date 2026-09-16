@@ -28,6 +28,18 @@ class AuditLogsView(ft.Container):
             expand=True,
         )
 
+        self.account_filter = ft.Dropdown(
+            options=[ft.DropdownOption("ALL", "All Accounts")],
+            value="ALL",
+            width=220,
+            text_size=12,
+            content_padding=padding_symmetric(horizontal=10, vertical=4),
+            border_radius=8,
+            border_color=COLORS["border"],
+            bgcolor=COLORS["bg_card"],
+            on_select=lambda e: self.load_logs(),
+        )
+
         content = ft.Column(
             expand=True,
             spacing=16,
@@ -47,23 +59,27 @@ class AuditLogsView(ft.Container):
                             ft.Text("Immutable local record of all automated and approved email operations.", size=13, color=COLORS["text_secondary"]),
                         ], spacing=2),
                     ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                    ft.OutlinedButton(
-                        "Refresh Logs",
-                        icon=ft.Icons.REFRESH,
-                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
-                        on_click=lambda e: self.load_logs(),
-                    ),
+                    ft.Row([
+                        self.account_filter,
+                        ft.OutlinedButton(
+                            "Refresh Logs",
+                            icon=ft.Icons.REFRESH,
+                            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+                            on_click=lambda e: self.load_logs(),
+                        ),
+                    ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
 
                 # Table Header
                 ft.Container(
                     content=ft.Row([
-                        ft.Text("TIMESTAMP", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_muted"], width=150),
-                        ft.Text("ACTION", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_muted"], width=110),
-                        ft.Text("SENDER / TARGET", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_muted"], width=180),
+                        ft.Text("TIMESTAMP", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_muted"], width=140),
+                        ft.Text("ACTION", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_muted"], width=100),
+                        ft.Text("ACCOUNT", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_muted"], width=140),
+                        ft.Text("SENDER / TARGET", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_muted"], width=160),
                         ft.Text("SUBJECT", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_muted"], expand=True),
-                        ft.Text("APPROVED", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_muted"], width=100),
-                        ft.Text("REASON", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_muted"], width=180),
+                        ft.Text("APPROVED", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_muted"], width=90),
+                        ft.Text("REASON", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_muted"], width=160),
                     ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
                     bgcolor=COLORS["bg_card_hover"],
                     border=border_all(1, COLORS["border"]),
@@ -93,7 +109,19 @@ class AuditLogsView(ft.Container):
 
     def load_logs(self) -> None:
         self.logs_column.controls.clear()
-        logs = repository.get_recent_audit_logs(limit=100)
+
+        # Update account filter options dynamically
+        try:
+            accounts = repository.get_all_accounts()
+            opts = [ft.DropdownOption("ALL", "All Accounts")]
+            for acc in accounts:
+                opts.append(ft.DropdownOption(acc.email, acc.email))
+            self.account_filter.options = opts
+        except Exception:
+            pass
+
+        filter_email = self.account_filter.value if self.account_filter.value != "ALL" else None
+        logs = repository.get_recent_audit_logs(limit=100, account_email=filter_email)
 
         if not logs:
             self.logs_column.controls.append(
@@ -128,24 +156,27 @@ class AuditLogsView(ft.Container):
                     safe_update(r_cont)
                 return _on_h
 
+            acc_str = entry.account_email or "Local/Default"
+
             row = ft.Container(
                 content=ft.Row([
-                    ft.Text(time_str, size=12, color=COLORS["text_secondary"], width=150),
+                    ft.Text(time_str, size=11, color=COLORS["text_secondary"], width=140),
                     ft.Container(
                         content=ft.Text(entry.action_type or "ACTION", size=10, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
                         bgcolor=act_col,
-                        padding=padding_symmetric(horizontal=8, vertical=3),
+                        padding=padding_symmetric(horizontal=6, vertical=2),
                         border_radius=4,
-                        width=110,
+                        width=100,
                         alignment=align_center(),
                     ),
-                    ft.Text(entry.sender or "(None)", size=12, color=COLORS["text_primary"], width=180, no_wrap=True),
+                    ft.Text(acc_str, size=11, color=COLORS["text_secondary"], width=140, no_wrap=True),
+                    ft.Text(entry.sender or "(None)", size=12, color=COLORS["text_primary"], width=160, no_wrap=True),
                     ft.Text(entry.subject or "(No Subject)", size=12, color=COLORS["text_secondary"], expand=True, no_wrap=True),
                     ft.Container(
                         content=ft.Text(appr_str, size=11, weight=ft.FontWeight.BOLD, color=appr_col),
-                        width=100,
+                        width=90,
                     ),
-                    ft.Text(entry.reason or "Rule execution", size=11, color=COLORS["text_muted"], width=180, no_wrap=True),
+                    ft.Text(entry.reason or "Rule execution", size=11, color=COLORS["text_muted"], width=160, no_wrap=True),
                 ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
                 bgcolor=row_bg,
                 border=border_only(

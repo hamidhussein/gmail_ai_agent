@@ -232,3 +232,78 @@ def test_bulk_suggestion_status_update(test_repo):
 
     assert test_repo.update_suggestions_status(suggestion_ids, "REJECTED") == 3
     assert test_repo.get_pending_suggestions(account_id=account.id) == []
+
+
+def test_daily_digests_are_isolated_per_account(test_repo):
+    """Daily digests generated for two different accounts on the same day must not collide or overwrite."""
+    account_a = test_repo.get_or_create_account("alice@corp.com")
+    account_b = test_repo.get_or_create_account("bob@corp.com")
+    digest_date = "2026-09-15"
+
+    digest_a = test_repo.save_daily_digest(
+        digest_date=digest_date,
+        total_emails=10,
+        important_count=4,
+        need_reply_count=2,
+        meetings_count=1,
+        cleanup_suggested_count=3,
+        summary_markdown="### Alice's Briefing",
+        account_id=account_a.id,
+    )
+    digest_b = test_repo.save_daily_digest(
+        digest_date=digest_date,
+        total_emails=25,
+        important_count=8,
+        need_reply_count=5,
+        meetings_count=4,
+        cleanup_suggested_count=7,
+        summary_markdown="### Bob's Briefing",
+        account_id=account_b.id,
+    )
+
+    assert digest_a.id != digest_b.id
+    assert digest_a.account_id == account_a.id
+    assert digest_b.account_id == account_b.id
+
+    fetched_a = test_repo.get_latest_daily_digest(account_id=account_a.id)
+    fetched_b = test_repo.get_latest_daily_digest(account_id=account_b.id)
+
+    assert fetched_a is not None
+    assert fetched_b is not None
+    assert fetched_a.total_emails == 10
+    assert fetched_b.total_emails == 25
+    assert "Alice" in fetched_a.summary_markdown
+    assert "Bob" in fetched_b.summary_markdown
+
+
+def test_audit_logs_can_filter_by_account(test_repo):
+    """Audit logs can be queried globally or isolated to a specific account email."""
+    test_repo.log_action(
+        action_type="ARCHIVE",
+        email_message_id="msg_1",
+        account_email="user1@corp.com",
+        subject="User 1 Newsletter",
+        sender="news@test.com",
+        reason="Auto-cleanup",
+    )
+    test_repo.log_action(
+        action_type="MOVE_TRASH",
+        email_message_id="msg_2",
+        account_email="user2@corp.com",
+        subject="User 2 Spam",
+        sender="spam@test.com",
+        reason="Phishing rule",
+    )
+
+    all_logs = test_repo.get_recent_audit_logs(limit=50)
+    assert len(all_logs) >= 2
+
+    user1_logs = test_repo.get_recent_audit_logs(account_email="user1@corp.com")
+    assert len(user1_logs) == 1
+    assert user1_logs[0].account_email == "user1@corp.com"
+    assert user1_logs[0].action_type == "ARCHIVE"
+
+    user2_logs = test_repo.get_recent_audit_logs(account_email="user2@corp.com")
+    assert len(user2_logs) == 1
+    assert user2_logs[0].account_email == "user2@corp.com"
+    assert user2_logs[0].action_type == "MOVE_TRASH"

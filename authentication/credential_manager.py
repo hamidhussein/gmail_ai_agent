@@ -108,6 +108,15 @@ class CredentialManager:
         """Returns True when the active config is the built-in default (not user-supplied)."""
         return not self.has_custom_credentials()
 
+    def is_configured(self) -> bool:
+        """Returns True if valid non-placeholder Google OAuth credentials are configured."""
+        cid = self.get_client_id()
+        if not cid:
+            return False
+        if "YOUR_DEFAULT_CLIENT_ID" in cid:
+            return False
+        return True
+
     # ------------------------------------------------------------------
     # User-supplied credential management (power users / enterprise)
     # ------------------------------------------------------------------

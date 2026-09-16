@@ -106,6 +106,11 @@ class OAuthManager:
         or adding a different account.
         Returns the authenticated user email on success.
         """
+        if not credential_manager.is_configured():
+            raise AuthenticationError(
+                "Google Cloud OAuth Client ID is not configured. Please paste your credentials.json in Settings or set GMAILAI_GOOGLE_CLIENT_ID."
+            )
+
         client_config = credential_manager.get_client_config(credentials_path)
         if not client_config:
             raise AuthenticationError(

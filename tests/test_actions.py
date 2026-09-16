@@ -2,6 +2,8 @@
 Unit Tests - Gmail Actions Safety Guard Integration
 """
 import pytest
+import base64
+from email import message_from_bytes
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 
@@ -122,3 +124,38 @@ def test_trash_alias_requires_explicit_confirmation(actions_demo):
     """The convenience API must never manufacture deletion approval."""
     with pytest.raises(SafetyViolationError):
         actions_demo.trash_message("message-3")
+
+
+def test_create_draft_rejects_empty_reply_before_gmail_call(actions_demo):
+    with patch.object(actions_demo, "_get_service") as get_service:
+        with pytest.raises(GmailAPIError, match="reply is empty"):
+            actions_demo.create_draft("person@example.com", "Hello", "   ")
+    get_service.assert_not_called()
+
+
+def test_create_draft_builds_threaded_reply_message(actions_demo):
+    service = MagicMock()
+    create = service.users.return_value.drafts.return_value.create
+    create.return_value = MagicMock()
+
+    with (
+        patch.object(actions_demo, "_get_service", return_value=service),
+        patch("gmail.actions.GmailClientFactory.execute_with_retry", return_value={"id": "draft-1"}),
+        patch("gmail.actions.repository.log_action") as log_action,
+    ):
+        result = actions_demo.create_draft(
+            recipient="Sarah <sarah@example.com>",
+            subject="Project timeline",
+            body_text="Hi Sarah,\n\nI will send it Thursday.\n\nBest,\nHamid",
+            thread_id="thread-123",
+        )
+
+    assert result == {"id": "draft-1"}
+    draft_body = create.call_args.kwargs["body"]
+    assert draft_body["message"]["threadId"] == "thread-123"
+    decoded = base64.urlsafe_b64decode(draft_body["message"]["raw"])
+    message = message_from_bytes(decoded)
+    assert message["To"] == "Sarah <sarah@example.com>"
+    assert message["Subject"] == "Re: Project timeline"
+    assert "I will send it Thursday" in message.get_payload(decode=True).decode("utf-8")
+    log_action.assert_called_once()

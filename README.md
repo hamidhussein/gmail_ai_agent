@@ -17,7 +17,7 @@
 
 ## 🌟 Executive Overview
 
-**GmailAI Assistant** is a commercial-grade desktop application that triages, analyzes, and drafts intelligent responses for your Gmail inbox. It combines an **on-device Local AI Engine (Ollama)** with a **Cloud AI Engine (OpenAI)** and a **Heuristic Rule Engine** with strict safety guardrails.
+**GmailAI Assistant** is a commercial-grade desktop application that triages, analyzes, and drafts intelligent responses for your Gmail inbox. It combines an **on-device Local AI Engine (Ollama)** with a **Cloud AI Engine (Google Gemini & OpenAI)** and a **Heuristic Rule Engine** with strict safety guardrails.
 
 ### 🔑 Key Features
 
@@ -25,14 +25,14 @@
 - **📥 Intelligence Inbox**: Automatic multi-category classification across 11 standard enterprise categories (`CLIENT`, `WORK`, `BANK`, `FINANCE`, `LEGAL`, `NEWSLETTER`, `PROMOTION`, `SOCIAL`, `ADVERTISEMENT`, `SPAM`, `PERSONAL`).
 - **🧠 Hybrid AI Router**:
   - Queries **Local AI (Ollama)** for zero latency & complete on-device privacy.
-  - If confidence is $< 85\%$ or Ollama is offline, gracefully routes to **Cloud AI (OpenAI GPT-4o-mini)**.
+  - If confidence is $< 85\%$ or Ollama is offline, gracefully routes to **Cloud AI (Google Gemini 2.5/3 or OpenAI GPT-4o-mini)**.
   - Falls back to a deterministic **Heuristic Rule Engine** with 40+ domain maps for $100\%$ zero-crash reliability.
 - **🎨 Light & Dark Themes**: Choose between Clean Slate Light Mode (Default) and Obsidian Midnight Dark Mode (`#060913`).
 - **🧹 Smart Cleanup**: Batch-review and approve cleanup recommendations to archive newsletters and promotional spam in 1 click.
 - **💬 AI Reply Assistant**: Context-aware drafting in 6 distinct tones (*Professional, Friendly, Short, Detailed, Apology, Follow-up*) with automatic Gmail draft synchronization.
-- **📋 Daily Briefings**: Executive summaries, pending deadlines, and VIP requests aggregated into daily briefings.
+- **📋 Daily Briefings**: Executive summaries, pending deadlines, and VIP requests aggregated into account-isolated daily briefings.
 - **🛡️ Privacy & Safety Guardrails**: Sensitive categories (Banking, Legal, Work VIPs) are protected from accidental modifications. Trashing and permanent deletions require explicit user confirmation.
-- **💾 Local Encrypted Storage**: SQLite database with machine-salted AES encryption for tokens and 1-click encrypted backup export.
+- **💾 Local Encrypted Storage & Privacy**: OAuth credentials and backup archives are encrypted with machine-salted AES-256. Email caches remain strictly on your local device.
 
 ---
 
@@ -41,7 +41,7 @@
 ### Prerequisites
 - Python **3.10+** (Python 3.12 recommended)
 - (Optional) [Ollama](https://ollama.com/) running locally with `qwen2.5:latest` or `llama3.1:latest`
-- (Optional) OpenAI API Key for cloud fallback
+- (Optional) [Google Gemini API Key](https://aistudio.google.com/apikey) (Recommended, free tier available) or OpenAI API Key
 
 ### Installation
 
@@ -87,7 +87,9 @@ To connect your real Gmail account with Google's official OAuth 2.0 flow:
    - In GmailAI, go to **Settings & AI** → **Step 5: Paste credentials.json content**, paste the JSON, and click **Save Credentials & Connect Gmail**!
 
 > [!TIP]
-> **Google Verification Warning**: When testing your app, Google may display *"Google hasn't verified this app"*. Click **Advanced** → **Go to Gmail AI Assistant (unsafe)** → **Continue** to grant permissions.
+> **Developer Testing vs Public Distribution**:
+> - **Private Testing Mode**: In the Google Cloud Console, keeping the app in "Testing" mode allows you and up to 100 manually added Test Users to connect instantly without Google verification. If Google displays *"Google hasn't verified this app"*, click **Advanced** → **Go to Gmail AI Assistant (unsafe)** → **Continue**.
+> - **Public Distribution Mode**: Distributing the app publicly to unlisted users requires completing the [Google OAuth App Verification Process](https://support.google.com/cloud/answer/13463073). See [PUBLISHING_CHECKLIST.md](PUBLISHING_CHECKLIST.md) for full compliance instructions.
 
 ---
 

@@ -10,7 +10,7 @@ from database.repository import Repository
 from ai.schemas import EmailClassificationResult
 from app.constants import EmailCategory, ActionType, RiskLevel, AISource
 from app.config import config_manager
-from automation.scheduler import BackgroundScheduler
+from automation.scheduler import BackgroundScheduler, should_create_cleanup_suggestion
 from core.events import EVT_SYNC_ERROR
 
 
@@ -155,3 +155,10 @@ def test_live_sync_failure_is_reported_without_false_success():
 
     update_synced.assert_not_called()
     publish.assert_any_call(EVT_SYNC_ERROR, "network down")
+
+
+def test_cleanup_suggestions_respect_confidence_threshold():
+    assert should_create_cleanup_suggestion("ARCHIVE", 0.85, 0.85)
+    assert should_create_cleanup_suggestion("MOVE_TRASH", 0.95, 0.85)
+    assert not should_create_cleanup_suggestion("ARCHIVE", 0.84, 0.85)
+    assert not should_create_cleanup_suggestion("LABEL", 0.99, 0.85)

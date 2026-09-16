@@ -23,6 +23,11 @@ def _utcnow() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
 
+def should_create_cleanup_suggestion(action: str, confidence: float, threshold: float) -> bool:
+    """Allow only supported cleanup actions that meet the configured confidence floor."""
+    return action in {"ARCHIVE", "MOVE_TRASH"} and (confidence or 0.0) >= threshold
+
+
 class BackgroundScheduler:
     """Threaded background scheduler for background email synchronization and AI processing."""
 
@@ -138,7 +143,11 @@ class BackgroundScheduler:
                 saved = repository.save_or_update_email(email_dict)
 
                 # If cleanup suggested, create suggestion record
-                if saved.suggested_action in ["ARCHIVE", "MOVE_TRASH"]:
+                if should_create_cleanup_suggestion(
+                    saved.suggested_action,
+                    saved.ai_confidence,
+                    config_manager.config.hybrid_confidence_threshold,
+                ):
                     repository.create_suggestion(
                         email_id=saved.id,
                         action_type=saved.suggested_action,

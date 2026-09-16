@@ -31,6 +31,7 @@ class ReplyDialog(ft.AlertDialog):
         self.email_data = email_data
         self.on_draft_created = on_draft_created
         self.selected_tone = ReplyTone.PROFESSIONAL.value
+        self._generation_version = 0
 
         # Controls
         self.tone_dropdown = ft.Dropdown(
@@ -87,6 +88,7 @@ class ReplyDialog(ft.AlertDialog):
             bgcolor=COLORS["accent"],
             color="#FFFFFF",
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+            disabled=True,
             on_click=lambda e: self._save_draft(),
         )
 
@@ -201,44 +203,59 @@ class ReplyDialog(ft.AlertDialog):
         self._start_worker_generation()
 
     def _start_worker_generation(self) -> None:
-        def worker():
-            tone_val = ReplyTone(self.selected_tone)
-            notes = (self.custom_prompt.value or "").strip()
-            user_name = user_profile_manager.profile.name or "Alex"
+        self._generation_version += 1
+        generation_version = self._generation_version
 
-            draft = reply_generator.generate_reply(
-                sender_name=self.email_data.get("sender_name", ""),
-                sender_email=self.email_data.get("sender", ""),
-                subject=self.email_data.get("subject", ""),
-                original_body=self.email_data.get("body_plain", ""),
-                tone=tone_val,
-                user_name=user_name,
-                extra_instructions=notes if notes else None,
-            )
+        def worker():
+            draft = ""
+            source = ""
+            generation_error = None
+            try:
+                tone_val = ReplyTone(self.selected_tone)
+                notes = (self.custom_prompt.value or "").strip()
+                user_name = user_profile_manager.profile.name or "Alex"
+
+                draft, source = reply_generator.generate_reply_with_source(
+                    sender_name=self.email_data.get("sender_name", ""),
+                    sender_email=self.email_data.get("sender", ""),
+                    subject=self.email_data.get("subject", ""),
+                    original_body=self.email_data.get("body_plain", ""),
+                    tone=tone_val,
+                    user_name=user_name,
+                    extra_instructions=notes if notes else None,
+                )
+            except Exception as ex:
+                generation_error = ex
 
             async def _apply_draft():
-                self.reply_editor.value = draft
-                self.spinner.visible = False
-                self.status_icon.visible = True
-                self.status_text.value = "Draft ready for review"
-                self.status_text.color = COLORS["success"]
-                self.regen_btn.disabled = False
-                self.char_count_text.value = f"{len(draft.strip()):,} chars"
-                safe_update(self.page_ref)
+                self._apply_generation_result(generation_version, draft, source, generation_error)
 
             try:
                 self.page_ref.run_task(_apply_draft)
             except Exception:
-                self.reply_editor.value = draft
-                self.spinner.visible = False
-                self.status_icon.visible = True
-                self.status_text.value = "Draft ready for review"
-                self.status_text.color = COLORS["success"]
-                self.regen_btn.disabled = False
-                self.char_count_text.value = f"{len(draft.strip()):,} chars"
-                safe_update(self.page_ref)
+                self._apply_generation_result(generation_version, draft, source, generation_error)
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_generation_result(self, version: int, draft: str, source: str, error=None) -> None:
+        """Apply only the newest generation result and always restore UI controls."""
+        if version != self._generation_version:
+            return
+        self.spinner.visible = False
+        self.regen_btn.disabled = False
+        if error is not None or not draft.strip():
+            self.status_icon.visible = False
+            self.status_text.value = f"Could not generate reply: {error or 'empty response'}"
+            self.status_text.color = COLORS["danger"]
+            self.draft_btn.disabled = True
+        else:
+            self.reply_editor.value = draft
+            self.status_icon.visible = True
+            self.status_text.value = f"Draft ready for review • {source}"
+            self.status_text.color = COLORS["success"]
+            self.char_count_text.value = f"{len(draft.strip()):,} chars"
+            self.draft_btn.disabled = False
+        safe_update(self.page_ref)
 
     def _copy_text(self) -> None:
         try:
@@ -248,6 +265,14 @@ class ReplyDialog(ft.AlertDialog):
             pass
 
     def _save_draft(self) -> None:
+        if not (self.reply_editor.value or "").strip():
+            self.status_icon.visible = False
+            self.status_text.visible = True
+            self.status_text.value = "Generate or enter a reply before creating a Gmail draft."
+            self.status_text.color = COLORS["danger"]
+            safe_update(self.page_ref)
+            return
+
         self.draft_btn.disabled = True
         self.spinner.visible = True
         self.status_icon.visible = False
@@ -278,8 +303,8 @@ class ReplyDialog(ft.AlertDialog):
                         self.on_draft_created(self.email_data.get("message_id", ""))
                 else:
                     self.status_icon.visible = False
-                    self.status_text.value = f"Saved locally: {save_err}"
-                    self.status_text.color = COLORS["warning"]
+                    self.status_text.value = f"Gmail draft failed: {save_err}"
+                    self.status_text.color = COLORS["danger"]
                 self.draft_btn.disabled = False
                 safe_update(self.page_ref)
 
@@ -295,8 +320,8 @@ class ReplyDialog(ft.AlertDialog):
                         self.on_draft_created(self.email_data.get("message_id", ""))
                 else:
                     self.status_icon.visible = False
-                    self.status_text.value = f"Saved locally: {save_err}"
-                    self.status_text.color = COLORS["warning"]
+                    self.status_text.value = f"Gmail draft failed: {save_err}"
+                    self.status_text.color = COLORS["danger"]
                 self.draft_btn.disabled = False
                 safe_update(self.page_ref)
 

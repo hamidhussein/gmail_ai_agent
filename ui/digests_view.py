@@ -84,7 +84,13 @@ class DailyDigestsView(ft.Container):
         self.digests_column.controls.clear()
         session = repository.get_session()
         try:
-            digests = session.query(DailyDigestRecord).order_by(DailyDigestRecord.digest_date.desc()).limit(20).all()
+            account = repository.get_active_account()
+            q = session.query(DailyDigestRecord)
+            if account:
+                q = q.filter(
+                    (DailyDigestRecord.account_id == account.id) | (DailyDigestRecord.account_id.is_(None))
+                )
+            digests = q.order_by(DailyDigestRecord.digest_date.desc()).limit(20).all()
         finally:
             session.close()
 
@@ -165,7 +171,8 @@ class DailyDigestsView(ft.Container):
         def worker():
             gen_err = None
             try:
-                daily_digest_generator.generate_digest_for_today()
+                account = repository.get_active_account()
+                daily_digest_generator.generate_digest_for_today(account_id=account.id if account else None)
             except Exception as e:
                 gen_err = e
 

@@ -2,7 +2,8 @@
 GmailAI Assistant - Smart Reply Generator
 """
 import logging
-from typing import Optional, Dict, Any
+import re
+from typing import Optional, Tuple
 
 from app.constants import ReplyTone
 from app.config import config_manager
@@ -47,7 +48,29 @@ class ReplyGenerator:
         user_name: str = "Alex",
         extra_instructions: Optional[str] = None,
     ) -> str:
-        """Generates email reply text using Hybrid AI with template fallback."""
+        """Generate a reply while preserving the original string-only API."""
+        reply, _source = self.generate_reply_with_source(
+            sender_name=sender_name,
+            sender_email=sender_email,
+            subject=subject,
+            original_body=original_body,
+            tone=tone,
+            user_name=user_name,
+            extra_instructions=extra_instructions,
+        )
+        return reply
+
+    def generate_reply_with_source(
+        self,
+        sender_name: str,
+        sender_email: str,
+        subject: str,
+        original_body: str,
+        tone: ReplyTone = ReplyTone.PROFESSIONAL,
+        user_name: str = "Alex",
+        extra_instructions: Optional[str] = None,
+    ) -> Tuple[str, str]:
+        """Generate a reply using the configured routing mode and report its source."""
         tone_instruction = TONE_PROMPT_INSTRUCTIONS.get(tone, TONE_PROMPT_INSTRUCTIONS[ReplyTone.PROFESSIONAL])
         
         system_prompt = f"""You are an elite executive email assistant drafting a reply for {user_name}.
@@ -68,32 +91,53 @@ User specific notes/instructions: {extra_instructions or 'None'}
 
 Draft the reply:"""
 
-        # Try Local AI first
-        try:
-            reply = self.local_client.generate_text(user_prompt, system_prompt)
-            if reply and len(reply) > 20:
-                return reply
-        except Exception:
-            pass
+        mode = config_manager.config.ai_mode.upper()
 
-        # Try Cloud AI (prefer configured provider)
+        if mode in {"HYBRID", "LOCAL_ONLY"}:
+            try:
+                reply = self._clean_reply(self.local_client.generate_text(user_prompt, system_prompt))
+                if reply:
+                    return reply, "Local Ollama"
+            except Exception as ex:
+                logger.info("Local reply generation unavailable: %s", ex)
+
         cloud_clients = []
         provider = config_manager.config.cloud_provider.lower()
         if provider == "gemini":
-            cloud_clients = [self.gemini_client, self.openai_client]
+            cloud_clients = [(self.gemini_client, "Google Gemini"), (self.openai_client, "OpenAI")]
         else:
-            cloud_clients = [self.openai_client, self.gemini_client]
+            cloud_clients = [(self.openai_client, "OpenAI"), (self.gemini_client, "Google Gemini")]
 
-        for client in cloud_clients:
-            if client.is_configured():
-                try:
-                    reply = client.generate_text(user_prompt, system_prompt)
-                    if reply and len(reply) > 20:
-                        return reply
-                except Exception:
-                    pass
+        if mode in {"HYBRID", "CLOUD_ONLY"}:
+            for client, source in cloud_clients:
+                if client.is_configured():
+                    try:
+                        reply = self._clean_reply(client.generate_text(user_prompt, system_prompt))
+                        if reply:
+                            return reply, source
+                    except Exception as ex:
+                        logger.info("%s reply generation unavailable: %s", source, ex)
 
-        # High-quality template fallback if no AI is available
+        return self._template_reply(sender_name, subject, tone, user_name), "Template fallback"
+
+    @staticmethod
+    def _clean_reply(reply: Optional[str]) -> str:
+        """Normalize model output and reject empty or unusably short replies."""
+        cleaned = (reply or "").strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```(?:text|markdown)?\s*", "", cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(r"\s*```$", "", cleaned).strip()
+        lines = cleaned.splitlines()
+        if lines and lines[0].strip().lower().startswith("subject:"):
+            lines = lines[1:]
+            while lines and not lines[0].strip():
+                lines.pop(0)
+            cleaned = "\n".join(lines).strip()
+        return cleaned if len(cleaned) > 20 else ""
+
+    @staticmethod
+    def _template_reply(sender_name: str, subject: str, tone: ReplyTone, user_name: str) -> str:
+        """Return a safe deterministic reply when configured AI engines are unavailable."""
         salutation = f"Hi {sender_name.split()[0] if sender_name else 'there'},"
         if tone == ReplyTone.SHORT:
             return f"{salutation}\n\nThank you for your email. I have received your message regarding '{subject}' and will review it shortly.\n\nBest regards,\n{user_name}"

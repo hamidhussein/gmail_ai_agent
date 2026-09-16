@@ -11,6 +11,7 @@ from database.models import DailyDigestRecord
 from app.constants import ActionType, EmailCategory
 from ai.local_model import LocalOllamaClient
 from ai.cloud_model import CloudOpenAIClient
+from ai.gemini_model import CloudGeminiClient
 from app.config import config_manager
 from memory.user_profile import user_profile_manager
 
@@ -22,16 +23,22 @@ class DailyDigestGenerator:
 
     def __init__(self):
         self.local_client = LocalOllamaClient()
-        self.cloud_client = CloudOpenAIClient()
+        self.openai_client = CloudOpenAIClient()
+        self.gemini_client = CloudGeminiClient()
 
-    def generate_digest_for_today(self) -> DailyDigestRecord:
+    def generate_digest_for_today(self, account_id: Optional[int] = None) -> DailyDigestRecord:
         """Compiles today's email intelligence report and persists to database."""
+        if account_id is None:
+            active = repository.get_active_account()
+            if active:
+                account_id = active.id
+
         today_str = datetime.date.today().strftime("%Y-%m-%d")
         now = datetime.datetime.utcnow()
         yesterday = now - datetime.timedelta(days=1)
 
-        # Query recent emails
-        recent_emails = repository.get_inbox_emails(limit=100)
+        # Query recent emails scoped to the target account
+        recent_emails = repository.get_inbox_emails(account_id=account_id, limit=100)
         today_emails = [e for e in recent_emails if e.received_at and e.received_at >= yesterday]
         if not today_emails and recent_emails:
             today_emails = recent_emails[:30]
@@ -67,8 +74,9 @@ class DailyDigestGenerator:
             cleanup_suggested_count=len(cleanup_emails),
             summary_markdown=summary_markdown,
             stats_json=json.dumps(stats),
+            account_id=account_id,
         )
-        logger.info(f"Daily digest generated for {today_str}")
+        logger.info(f"Daily digest generated for {today_str} (account={account_id})")
         return record
 
     def _compose_summary(

@@ -268,11 +268,19 @@ class GmailActions:
         thread_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Creates a reply draft in Gmail."""
+        recipient = (recipient or "").strip()
+        subject = (subject or "").strip()
+        body_text = (body_text or "").strip()
+        if not recipient:
+            raise GmailAPIError("A recipient is required to create a Gmail draft.")
+        if not body_text:
+            raise GmailAPIError("The reply is empty. Generate or enter a message before saving the draft.")
+
         service = self._get_service()
 
         message = MIMEText(body_text, "plain", "utf-8")
         message["to"] = recipient
-        message["subject"] = subject if subject.startswith("Re:") else f"Re: {subject}"
+        message["subject"] = subject if subject.lower().startswith("re:") else f"Re: {subject}"
 
         raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
         draft_body: Dict[str, Any] = {"message": {"raw": raw_message}}

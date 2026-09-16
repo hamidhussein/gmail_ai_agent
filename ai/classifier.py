@@ -4,6 +4,7 @@ GmailAI Assistant - Email Intelligence Classifier & Rule Engine
 import re
 import json
 import logging
+from email.utils import parseaddr
 from typing import Dict, Any, List, Optional
 from app.constants import (
     EmailCategory,
@@ -36,6 +37,14 @@ Guidelines:
 6. Category 'PROMOTION'/'ADVERTISEMENT': discounts, sales offers, marketing promos (suggest ARCHIVE).
 7. Category 'SPAM': unsolicited junk, phishing, scam attempts (suggest MOVE_TRASH, risk HIGH/CRITICAL).
 8. If an email explicitly requires a user reply or decision, suggest 'DRAFT_REPLY'.
+9. Treat sender identity, authentication/security alerts, transaction receipts, and
+   marketing content as separate signals; do not classify from one keyword alone.
+10. Never suggest MOVE_TRASH for a plausible account-security alert from a known
+    service or financial domain. Prefer KEEP when identity or intent is uncertain.
+11. Use headers such as List-Unsubscribe only as evidence of bulk mail; transactional
+    receipts, password resets, and requested notifications are not newsletters.
+12. Extract concrete requests and deadlines into action_items. Use high urgency only
+    when the content contains a real deadline, time-sensitive event, or explicit action.
 """
 
 # ---------------------------------------------------------------------------
@@ -102,12 +111,44 @@ SENDER_DOMAIN_RULES: Dict[str, Dict[str, Any]] = {
 }
 
 
+def _extract_sender_domain(sender: str) -> str:
+    """Return a normalized domain from either a raw address or RFC display address."""
+    address = parseaddr(sender or "")[1].strip().lower()
+    if "@" not in address:
+        return ""
+    return address.rsplit("@", 1)[1].rstrip(".")
+
+
+def _domain_matches(sender_domain: str, known_domain: str) -> bool:
+    """Match an exact domain or its subdomain, never an unsafe substring."""
+    return sender_domain == known_domain or sender_domain.endswith("." + known_domain)
+
+
 def _match_sender_domain(sender: str) -> Optional[Dict[str, Any]]:
-    """Check if sender email matches any known domain rule."""
+    """Check whether the parsed sender domain matches a known domain rule."""
+    sender_domain = _extract_sender_domain(sender)
     for domain, rule in SENDER_DOMAIN_RULES.items():
-        if domain in sender:
+        if _domain_matches(sender_domain, domain):
             return rule
     return None
+
+
+def _extract_action_items(text: str) -> List[str]:
+    """Extract a few concrete requests/deadlines for deterministic fallback results."""
+    candidates = re.split(r"(?<=[.!?])\s+|[\r\n]+", text or "")
+    request_markers = (
+        "please ", "can you ", "could you ", "would you ", "need you to ",
+        "action required", "reply by", "respond by", "due ", "deadline",
+    )
+    items: List[str] = []
+    for sentence in candidates:
+        clean = re.sub(r"\s+", " ", sentence).strip(" -\t")
+        lowered = clean.lower()
+        if 8 <= len(clean) <= 240 and any(marker in lowered for marker in request_markers):
+            items.append(clean)
+        if len(items) == 3:
+            break
+    return items
 
 
 class EmailClassifier:
@@ -134,15 +175,20 @@ Body:
         Guarantees resilient zero-crash fallback if no AI is available.
         """
         sender = (email_data.get("sender") or "").lower()
+        sender_domain = _extract_sender_domain(sender)
         sender_name = (email_data.get("sender_name") or "").lower()
         subject = (email_data.get("subject") or "").lower()
-        body = (email_data.get("body_plain") or "").lower()[:4000]
+        raw_body = (email_data.get("body_plain") or "")[:4000]
+        body = raw_body.lower()
         snippet = (email_data.get("snippet") or "").lower()
         is_newsletter_header = email_data.get("is_newsletter_header", False)
         list_unsubscribe = email_data.get("list_unsubscribe", "")
 
         text_corpus = f"{subject} {snippet} {body}"
         full_text = f"{subject} {snippet} {body} {sender} {sender_name}"
+        action_items = _extract_action_items(raw_body)
+        domain_match = _match_sender_domain(sender)
+        known_sender = domain_match is not None
 
         # =====================================================================
         # PASS 0: Spam / Phishing (highest priority — override everything)
@@ -155,7 +201,7 @@ Body:
             "nigerian prince", "million dollars", "lottery winner",
             "bitcoin doubler", "investment opportunity guaranteed",
         ]
-        if any(sig in text_corpus for sig in spam_signals):
+        if any(sig in text_corpus for sig in spam_signals) and not known_sender:
             return cls._result(EmailCategory.SPAM, 5, 10, RiskLevel.CRITICAL,
                                ActionType.MOVE_TRASH, 0.95,
                                "Suspicious phishing or security scam indicators detected.")
@@ -163,17 +209,23 @@ Body:
         # =====================================================================
         # PASS 1: Sender domain lookup (most reliable signal)
         # =====================================================================
-        domain_match = _match_sender_domain(sender)
         if domain_match:
             cat_enum = EmailCategory(domain_match["cat"])
-            # Refine: if domain says NEWSLETTER but subject looks like account security, override
-            if cat_enum in (EmailCategory.NEWSLETTER, EmailCategory.SOCIAL):
-                security_keywords = ["security alert", "sign-in", "password", "recovered",
-                                     "account data", "verification", "suspicious activity"]
-                if any(sk in text_corpus for sk in security_keywords):
-                    return cls._result(EmailCategory.PERSONAL, 70, 55, RiskLevel.MEDIUM,
-                                       ActionType.KEEP, 0.88,
-                                       "Account security notification from platform.")
+            security_keywords = ["security alert", "sign-in", "password", "recovered",
+                                 "account data", "verification", "suspicious activity",
+                                 "new login", "unrecognized device"]
+            if any(sk in text_corpus for sk in security_keywords):
+                security_category = cat_enum if cat_enum in (EmailCategory.BANK, EmailCategory.FINANCE) else EmailCategory.PERSONAL
+                return cls._result(security_category, 88, 75, RiskLevel.HIGH,
+                                   ActionType.KEEP, 0.91,
+                                   "Security-sensitive account notification from a known sender.",
+                                   action_items)
+
+            promo_signals = ["sale", "discount", "% off", "promo code", "shop now", "limited time"]
+            if sender_domain in {"amazon.com", "ebay.com"} and any(p in text_corpus for p in promo_signals):
+                return cls._result(EmailCategory.PROMOTION, 20, 15, RiskLevel.LOW,
+                                   ActionType.ARCHIVE, 0.91,
+                                   "Marketing offer from a commerce platform.")
             return cls._result(
                 cat_enum,
                 domain_match["imp"],
@@ -218,7 +270,7 @@ Body:
         # =====================================================================
         bank_domains = ["chase.com", "bankofamerica.com", "wellsfargo.com", "citi.com",
                         "hsbc.com", "barclays.com", "capitalone.com"]
-        if any(bd in sender for bd in bank_domains):
+        if any(_domain_matches(sender_domain, bd) for bd in bank_domains):
             return cls._result(EmailCategory.BANK, 85, 40, RiskLevel.HIGH,
                                ActionType.LABEL, 0.92,
                                "Banking statement or account notification from financial institution.")
@@ -259,11 +311,14 @@ Body:
             "project update", "project proposal", "scope of work",
         ]
         if any(ck in text_corpus for ck in client_keywords) or (
-            "urgent" in subject and not any(s in sender for s in ["facebook", "twitter", "linkedin"])
+            "urgent" in subject
+            and any(marker in text_corpus for marker in ["please", "can you", "could you", "proposal", "deliverable"])
+            and not any(s in sender for s in ["facebook", "twitter", "linkedin"])
         ):
             return cls._result(EmailCategory.CLIENT, 92, 85, RiskLevel.LOW,
                                ActionType.DRAFT_REPLY, 0.89,
-                               "Client communication requesting quotation, deliverable, or project response.")
+                               "Client communication requesting quotation, deliverable, or project response.",
+                               action_items)
 
         work_keywords = [
             "standup", "sprint", "pull request", "jira", "architecture review",
@@ -272,9 +327,11 @@ Body:
             "kanban", "retrospective", "design review", "1:1", "one-on-one",
         ]
         if any(wk in text_corpus for wk in work_keywords):
+            action = ActionType.DRAFT_REPLY if action_items else ActionType.KEEP
             return cls._result(EmailCategory.WORK, 80, 60, RiskLevel.LOW,
-                               ActionType.KEEP, 0.86,
-                               "Internal work and team engineering discussion.")
+                               action, 0.86,
+                               "Internal work and team engineering discussion.",
+                               action_items)
 
         # =====================================================================
         # PASS 6: Newsletter detection (List-Unsubscribe header is strong signal)
@@ -282,7 +339,7 @@ Body:
         newsletter_keywords = [
             "newsletter", "digest", "weekly edition", "weekly roundup",
             "morning brew", "techcrunch", "substack", "medium daily",
-            "unsubscribe", "view in browser", "email preferences",
+            "view in browser", "email preferences",
             "this week in", "daily brief", "news update",
         ]
         has_unsubscribe = bool(list_unsubscribe) or "unsubscribe" in body[:2000]
@@ -325,6 +382,17 @@ Body:
         # =====================================================================
         # PASS 9: Emails with unsubscribe but no other match → Newsletter
         # =====================================================================
+        direct_request = bool(action_items) or any(
+            signal in text_corpus
+            for signal in ["let me know", "what do you think", "are you available", "your feedback", "your approval"]
+        )
+        if direct_request and not is_newsletter_header:
+            urgency = 70 if any(s in text_corpus for s in ["urgent", "asap", "today", "tomorrow", "deadline", "by "]) else 50
+            return cls._result(EmailCategory.PERSONAL, 70, urgency, RiskLevel.LOW,
+                               ActionType.DRAFT_REPLY, 0.82,
+                               "Direct correspondence contains a request or decision for the user.",
+                               action_items)
+
         if has_unsubscribe:
             return cls._result(EmailCategory.NEWSLETTER, 20, 10, RiskLevel.LOW,
                                ActionType.ARCHIVE, 0.82,

@@ -12,6 +12,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -149,7 +150,8 @@ class DailyDigestRecord(Base):
     __tablename__ = "daily_digests"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    digest_date = Column(String(32), unique=True, nullable=False, index=True)  # YYYY-MM-DD
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True, index=True)
+    digest_date = Column(String(32), nullable=False, index=True)  # YYYY-MM-DD
     total_emails = Column(Integer, default=0)
     important_count = Column(Integer, default=0)
     need_reply_count = Column(Integer, default=0)
@@ -158,6 +160,13 @@ class DailyDigestRecord(Base):
     summary_markdown = Column(Text, nullable=False)
     stats_json = Column(Text, default="{}")
     created_at = Column(DateTime, default=_utcnow)
+
+    account = relationship("Account")
+
+    __table_args__ = (
+        UniqueConstraint("account_id", "digest_date", name="uq_digest_account_date"),
+        Index("idx_digest_account_date", "account_id", "digest_date"),
+    )
 
 
 class UserSafetyRule(Base):

@@ -23,7 +23,7 @@ from database.models import Base
 logger = logging.getLogger("GmailAI.Migrations")
 
 # Current schema version — bump this when adding a new migration.
-LATEST_VERSION = 1
+LATEST_VERSION = 2
 
 # ---------------------------------------------------------------------------
 # Migration registry
@@ -207,6 +207,17 @@ def _sync_missing_columns_from_metadata(engine: Engine) -> None:
                     conn.execute(text(sql))
                     logger.info(f"  Added column {table_name}.{col.name} ({col_type})")
         conn.commit()
+
+
+@_register(2, "Multi-account daily digest isolation & audit index")
+def _migration_002_multi_account_and_indexes(engine: Engine) -> None:
+    """
+    Ensures daily_digests has account_id column and adds performance indexes
+    for account-scoped daily digests and audit logs.
+    """
+    _add_column_if_missing(engine, "daily_digests", "account_id", "INTEGER")
+    _create_index_if_missing(engine, "idx_digest_account_date", "daily_digests", "account_id, digest_date")
+    _create_index_if_missing(engine, "idx_audit_account_email", "action_audit_logs", "account_email")
 
 
 # ---------------------------------------------------------------------------

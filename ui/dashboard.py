@@ -288,7 +288,10 @@ class DashboardView(ft.Container):
         self.banner_sub_text.value = f"{stats['cleanup_suggested_emails']} clutter items ready for safe review & archive."
 
         # Digest
-        digest = repository.get_latest_daily_digest()
+        digest = repository.get_latest_daily_digest(account_id=self._active_account_id)
+        if not digest and self._active_account_id is not None:
+            # Fallback to unassigned/demo digest if no account-specific digest exists yet
+            digest = repository.get_latest_daily_digest()
         if digest:
             self.briefing_markdown.value = digest.summary_markdown
         else:

@@ -11,6 +11,7 @@ import os
 import zipfile
 import datetime
 import webbrowser
+import threading
 from typing import Optional, List, Dict, Any
 import flet as ft
 from resources.styles.theme import (
@@ -33,6 +34,23 @@ from database.migrations import seed_demo_data
 from ai.local_model import LocalOllamaClient
 from memory.user_profile import user_profile_manager
 from automation.scheduler import scheduler
+
+
+def evaluate_ollama_status(client: LocalOllamaClient, model: str) -> tuple[bool, str]:
+    """Check both the Ollama service and the requested local model."""
+    if not client.is_available(force_check=True):
+        return False, f"Ollama server is not reachable at {client.base_url}. Start Ollama and try again."
+
+    installed = client.list_installed_models()
+    requested = (model or "").strip().lower()
+    requested_with_tag = requested if ":" in requested else f"{requested}:latest"
+    installed_lower = {name.lower() for name in installed}
+    if not requested or requested_with_tag not in installed_lower:
+        if installed:
+            return False, f"Model '{model}' is not installed. Available: {', '.join(installed)}"
+        return False, f"Ollama is running, but no models are installed. Run: ollama pull {model}"
+
+    return True, f"Ollama is ready. Model '{requested_with_tag}' is installed."
 
 
 class SettingsView(ft.Container):
@@ -76,6 +94,15 @@ class SettingsView(ft.Container):
             width=200,
             content_padding=10,
         )
+        self.ollama_test_button = ft.ElevatedButton(
+            "Test Ollama",
+            icon=ft.Icons.CHECK,
+            bgcolor=COLORS["primary"],
+            color="#FFFFFF",
+            on_click=lambda e: self._test_ollama(),
+        )
+        self.ollama_test_progress = ft.ProgressRing(width=18, height=18, stroke_width=2, visible=False)
+        self.ollama_status_text = ft.Text("", size=12, color=COLORS["text_secondary"], visible=False)
 
         self.openai_key_field = ft.TextField(
             value=config_manager.get_openai_api_key() or "",
@@ -160,14 +187,6 @@ class SettingsView(ft.Container):
             f"{int(config_manager.config.hybrid_confidence_threshold * 100)}%",
             size=14, weight=ft.FontWeight.BOLD, color=COLORS["primary"],
         )
-        self.confidence_bar = ft.ProgressBar(
-            value=config_manager.config.hybrid_confidence_threshold,
-            height=6,
-            color=COLORS["primary"],
-            bgcolor=COLORS["border"],
-            border_radius=3,
-        )
-
         # Section 4: User Profile
         self.user_name_field = ft.TextField(
             value=user_profile_manager.profile.name or "Alex",
@@ -243,8 +262,12 @@ class SettingsView(ft.Container):
                         ft.Row([
                             self.ollama_url_field,
                             self.ollama_model_field,
-                            ft.ElevatedButton("Test Ollama", icon=ft.Icons.CHECK, bgcolor=COLORS["primary"], color="#FFFFFF", on_click=lambda e: self._test_ollama()),
+                            self.ollama_test_button,
                         ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
+                        ft.Row([
+                            self.ollama_test_progress,
+                            self.ollama_status_text,
+                        ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                         ft.Divider(height=1, color=COLORS["border"]),
                         ft.Text("Google Gemini (Recommended Cloud AI)", size=12, weight=ft.FontWeight.BOLD, color=COLORS["text_secondary"]),
                         ft.Row([
@@ -283,7 +306,6 @@ class SettingsView(ft.Container):
                             self.confidence_val_text,
                         ]),
                         self.confidence_slider,
-                        self.confidence_bar,
                     ],
                 ),
 
@@ -673,11 +695,9 @@ class SettingsView(ft.Container):
     def _on_confidence_change(self, e):
         val = float(e.control.value) / 100.0
         self.confidence_val_text.value = f"{int(e.control.value)}%"
-        self.confidence_bar.value = val
         config_manager.config.hybrid_confidence_threshold = val
         config_manager.save()
         safe_update(self.confidence_val_text)
-        safe_update(self.confidence_bar)
 
     # =====================================================================
     # Gmail Auth Actions — Consumer-Ready
@@ -833,15 +853,50 @@ class SettingsView(ft.Container):
     def _test_ollama(self):
         url = self.ollama_url_field.value.strip()
         model = self.ollama_model_field.value.strip()
+        if not url or not model:
+            self._show_ollama_result(False, "Enter both the Ollama endpoint and model name.")
+            return
+
         config_manager.config.ollama_url = url
         config_manager.config.ollama_model = model
         config_manager.save()
 
-        client = LocalOllamaClient(base_url=url, default_model=model)
-        if client.is_available():
-            self._toast("Ollama connection successful! Model ready.", COLORS["success"])
-        else:
-            self._toast(f"Could not connect to Ollama at {url}", COLORS["danger"])
+        self.ollama_test_button.disabled = True
+        self.ollama_test_progress.visible = True
+        self.ollama_status_text.value = "Testing Ollama service and selected model..."
+        self.ollama_status_text.color = COLORS["primary"]
+        self.ollama_status_text.visible = True
+        safe_update(self.ollama_test_button)
+        safe_update(self.ollama_test_progress)
+        safe_update(self.ollama_status_text)
+
+        def worker():
+            try:
+                client = LocalOllamaClient(base_url=url, default_model=model)
+                success, message = evaluate_ollama_status(client, model)
+            except Exception as ex:
+                success, message = False, f"Ollama test failed: {ex}"
+
+            try:
+                self.page_ref.run_task(self._finish_ollama_test, success, message)
+            except Exception:
+                self._show_ollama_result(success, message)
+
+        threading.Thread(target=worker, name="GmailAIOllamaTest", daemon=True).start()
+
+    async def _finish_ollama_test(self, success: bool, message: str) -> None:
+        self._show_ollama_result(success, message)
+
+    def _show_ollama_result(self, success: bool, message: str) -> None:
+        self.ollama_test_button.disabled = False
+        self.ollama_test_progress.visible = False
+        self.ollama_status_text.value = message
+        self.ollama_status_text.color = COLORS["success"] if success else COLORS["danger"]
+        self.ollama_status_text.visible = True
+        safe_update(self.ollama_test_button)
+        safe_update(self.ollama_test_progress)
+        safe_update(self.ollama_status_text)
+        self._toast(message, COLORS["success"] if success else COLORS["danger"])
 
     def _save_openai_key(self):
         key = self.openai_key_field.value.strip()

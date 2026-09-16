@@ -45,6 +45,7 @@ def test_reconnect_uses_account_hint_and_reactivates_account():
     }
 
     with (
+        patch("authentication.oauth_manager.credential_manager.is_configured", return_value=True),
         patch("authentication.oauth_manager.credential_manager.get_client_config", return_value={"installed": {}}),
         patch("authentication.oauth_manager.InstalledAppFlow.from_client_config", return_value=flow),
         patch("authentication.oauth_manager.build", return_value=userinfo),
@@ -59,3 +60,28 @@ def test_reconnect_uses_account_hint_and_reactivates_account():
     save_token.assert_called_once()
     set_active.assert_called_once_with("user@example.com")
     assert "user@example.com" not in manager._invalid_accounts
+
+
+def test_unconfigured_oauth_credentials_raises_authentication_error():
+    import pytest
+    from core.exceptions import AuthenticationError
+
+    manager = OAuthManager()
+    with patch("authentication.oauth_manager.credential_manager.is_configured", return_value=False):
+        with pytest.raises(AuthenticationError) as exc_info:
+            manager.start_oauth_flow()
+        assert "Google Cloud OAuth Client ID is not configured" in str(exc_info.value)
+
+
+def test_credential_manager_detects_placeholder_and_configured():
+    from authentication.credential_manager import CredentialManager
+
+    cm = CredentialManager()
+    with patch.object(cm, "get_client_id", return_value="YOUR_DEFAULT_CLIENT_ID.apps.googleusercontent.com"):
+        assert cm.is_configured() is False
+
+    with patch.object(cm, "get_client_id", return_value=""):
+        assert cm.is_configured() is False
+
+    with patch.object(cm, "get_client_id", return_value="123456789-abcdef.apps.googleusercontent.com"):
+        assert cm.is_configured() is True

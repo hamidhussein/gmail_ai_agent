@@ -2,7 +2,7 @@
 #define MyAppName "GmailAI Assistant"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "GmailAI Team"
-#define MyAppURL "https://github.com/gmailai/assistant"
+#define MyAppURL "https://github.com/hamidhussein/gmail_ai_agent"
 #define MyAppExeName "GmailAI Assistant.exe"
 
 [Setup]
