@@ -2,8 +2,10 @@
 GmailAI Assistant - Gmail API Service Client & Factory
 """
 import time
+import random
 import logging
 from typing import Optional, Any
+from google.auth.exceptions import TransportError
 from googleapiclient.discovery import build, Resource
 from googleapiclient.errors import HttpError
 
@@ -41,21 +43,47 @@ class GmailClientFactory:
             raise GmailAPIError(f"Could not connect to Gmail API: {e}")
 
     @classmethod
-    def execute_with_retry(cls, request: Any, max_retries: int = 3) -> Any:
-        """Executes a Google API request with exponential backoff on rate limits."""
+    def execute_with_retry(cls, request: Any, max_retries: int = 4) -> Any:
+        """Execute a Gmail request with bounded exponential backoff and jitter."""
+        retryable_statuses = {408, 429, 500, 502, 503, 504}
+        attempts = max(1, max_retries)
         delay = 1.0
-        for attempt in range(max_retries):
+
+        for attempt in range(attempts):
             try:
                 return request.execute()
             except HttpError as err:
-                status_code = err.resp.status
-                if status_code in [429, 500, 503] and attempt < max_retries - 1:
-                    logger.warning(f"Gmail API HTTP {status_code}. Retrying in {delay}s...")
-                    time.sleep(delay)
-                    delay *= 2
-                else:
+                status_code = getattr(err.resp, "status", None)
+                if status_code not in retryable_statuses or attempt >= attempts - 1:
                     logger.error(f"Gmail API HttpError: {err}")
-                    raise GmailAPIError(f"Gmail API Error: {err}")
-            except Exception as e:
-                logger.error(f"Unexpected error executing Gmail API request: {e}")
-                raise GmailAPIError(f"Gmail request failed: {e}")
+                    raise GmailAPIError(f"Gmail API Error: {err}") from err
+
+                retry_after = None
+                try:
+                    retry_after = float(err.resp.get("retry-after"))
+                except (TypeError, ValueError, AttributeError):
+                    pass
+                sleep_for = min(60.0, retry_after if retry_after is not None else delay)
+                sleep_for += random.uniform(0.0, min(1.0, sleep_for * 0.25))
+                logger.warning(
+                    f"Gmail API HTTP {status_code}; retry {attempt + 1}/{attempts - 1} "
+                    f"in {sleep_for:.1f}s."
+                )
+                time.sleep(sleep_for)
+                delay = min(30.0, delay * 2)
+            except (TransportError, TimeoutError, ConnectionError, OSError) as err:
+                if attempt >= attempts - 1:
+                    logger.error(f"Gmail transport failed after {attempts} attempts: {err}")
+                    raise GmailAPIError(f"Gmail request failed: {err}") from err
+                sleep_for = delay + random.uniform(0.0, min(1.0, delay * 0.25))
+                logger.warning(
+                    f"Transient Gmail transport error; retry {attempt + 1}/{attempts - 1} "
+                    f"in {sleep_for:.1f}s: {err}"
+                )
+                time.sleep(sleep_for)
+                delay = min(30.0, delay * 2)
+            except Exception as err:
+                logger.error(f"Unexpected error executing Gmail API request: {err}")
+                raise GmailAPIError(f"Gmail request failed: {err}") from err
+
+        raise GmailAPIError("Gmail request failed after exhausting retries.")

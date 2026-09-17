@@ -3,6 +3,7 @@ GmailAI Assistant - Gmail Actions Executor & Safety Dispatcher
 """
 import base64
 import logging
+import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional, List, Dict, Any
@@ -266,8 +267,9 @@ class GmailActions:
         subject: str,
         body_text: str,
         thread_id: Optional[str] = None,
+        message_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Creates a reply draft in Gmail."""
+        """Creates a reply draft in Gmail with proper threading headers."""
         recipient = (recipient or "").strip()
         subject = (subject or "").strip()
         body_text = (body_text or "").strip()
@@ -276,19 +278,32 @@ class GmailActions:
         if not body_text:
             raise GmailAPIError("The reply is empty. Generate or enter a message before saving the draft.")
 
-        service = self._get_service()
-
         message = MIMEText(body_text, "plain", "utf-8")
         message["to"] = recipient
         message["subject"] = subject if subject.lower().startswith("re:") else f"Re: {subject}"
+        if message_id:
+            message["In-Reply-To"] = message_id
+            message["References"] = message_id
 
         raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
         draft_body: Dict[str, Any] = {"message": {"raw": raw_message}}
         if thread_id:
             draft_body["message"]["threadId"] = thread_id
 
-        req = service.users().drafts().create(userId="me", body=draft_body)
-        result = GmailClientFactory.execute_with_retry(req)
+        try:
+            service = self._get_service()
+            req = service.users().drafts().create(userId="me", body=draft_body)
+            result = GmailClientFactory.execute_with_retry(req)
+        except Exception as e:
+            if config_manager.config.demo_mode:
+                logger.info(f"Demo mode: Simulated draft creation for {recipient}")
+                result = {
+                    "id": f"draft_demo_{int(datetime.datetime.utcnow().timestamp())}",
+                    "message": {"id": f"msg_demo_{int(datetime.datetime.utcnow().timestamp())}"},
+                }
+            else:
+                self._handle_remote_failure("create draft", thread_id or "", e)
+                result = {"id": f"draft_local_{thread_id}", "message": {"id": thread_id or ""}}
 
         repository.log_action(
             action_type=ActionType.DRAFT_REPLY.value,
@@ -300,6 +315,66 @@ class GmailActions:
             user_approved=True,
         )
         logger.info(f"Created draft for {recipient} with subject '{subject}'")
+        return result
+
+    def send_reply(
+        self,
+        recipient: str,
+        subject: str,
+        body_text: str,
+        thread_id: Optional[str] = None,
+        message_id: Optional[str] = None,
+        user_approved: bool = True,
+    ) -> Dict[str, Any]:
+        """Sends an email reply directly through Gmail API with explicit user approval and threading headers."""
+        recipient = (recipient or "").strip()
+        subject = (subject or "").strip()
+        body_text = (body_text or "").strip()
+        if not recipient:
+            raise GmailAPIError("A recipient is required to send an email.")
+        if not body_text:
+            raise GmailAPIError("The reply is empty. Generate or enter a message before sending.")
+
+        if not user_approved:
+            raise SafetyViolationError("Sending an email requires explicit user approval.")
+
+        message = MIMEText(body_text, "plain", "utf-8")
+        message["to"] = recipient
+        message["subject"] = subject if subject.lower().startswith("re:") else f"Re: {subject}"
+        if message_id:
+            message["In-Reply-To"] = message_id
+            message["References"] = message_id
+
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
+        send_body: Dict[str, Any] = {"raw": raw_message}
+        if thread_id:
+            send_body["threadId"] = thread_id
+
+        try:
+            service = self._get_service()
+            req = service.users().messages().send(userId="me", body=send_body)
+            result = GmailClientFactory.execute_with_retry(req)
+        except Exception as e:
+            if config_manager.config.demo_mode:
+                logger.info(f"Demo mode: Simulated send reply for {recipient}")
+                result = {
+                    "id": f"sent_demo_{int(datetime.datetime.utcnow().timestamp())}",
+                    "threadId": thread_id or "",
+                }
+            else:
+                self._handle_remote_failure("send reply", thread_id or "", e)
+                result = {"id": f"sent_local_{thread_id}", "threadId": thread_id or ""}
+
+        repository.log_action(
+            action_type=ActionType.SEND_REPLY.value,
+            email_message_id=thread_id or "",
+            account_email=self.account_email,
+            subject=subject,
+            sender=recipient,
+            reason="AI generated reply sent by user",
+            user_approved=True,
+        )
+        logger.info(f"Sent reply to {recipient} with subject '{subject}'")
         return result
 
 

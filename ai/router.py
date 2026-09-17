@@ -7,6 +7,8 @@ Routes email classification between:
   3. Heuristic Rule Engine (resilient fallback)
 """
 import logging
+import threading
+import time
 from typing import Dict, Any, Tuple
 
 from app.config import config_manager
@@ -53,6 +55,37 @@ class HybridAIRouter:
         self.gemini_client = CloudGeminiClient(
             default_model=config_manager.config.gemini_model,
         )
+        self._backoff_lock = threading.Lock()
+        self._local_backoff_until = 0.0
+        self._cloud_backoff_until = 0.0
+
+    def _backoff_active(self, provider: str) -> bool:
+        with self._backoff_lock:
+            until = self._local_backoff_until if provider == "local" else self._cloud_backoff_until
+        return time.monotonic() < until
+
+    def _defer_provider(self, provider: str, seconds: float, reason: Exception) -> None:
+        until = time.monotonic() + seconds
+        with self._backoff_lock:
+            if provider == "local":
+                self._local_backoff_until = max(self._local_backoff_until, until)
+            else:
+                self._cloud_backoff_until = max(self._cloud_backoff_until, until)
+        logger.warning(f"{provider.capitalize()} AI paused for {int(seconds)}s after failure: {reason}")
+
+    def _clear_backoff(self, provider: str) -> None:
+        with self._backoff_lock:
+            if provider == "local":
+                self._local_backoff_until = 0.0
+            else:
+                self._cloud_backoff_until = 0.0
+
+    @staticmethod
+    def _cloud_backoff_seconds(error: Exception) -> float:
+        message = str(error).lower()
+        if "429" in message or "resource_exhausted" in message or "quota" in message:
+            return 300.0
+        return 60.0
 
     def _get_cloud_client(self):
         """Returns the active cloud client based on the configured provider."""
@@ -94,36 +127,45 @@ class HybridAIRouter:
         # Mode: CLOUD_ONLY
         if mode == "CLOUD_ONLY":
             cloud_client, cloud_source = self._get_cloud_client()
-            if cloud_client:
+            if cloud_client and not self._backoff_active("cloud"):
                 try:
                     res = cloud_client.generate_json(prompt, CLASSIFICATION_SYSTEM_PROMPT)
                     if res:
+                        self._clear_backoff("cloud")
                         res["confidence"] = ConfidenceEvaluator.evaluate(res)
                         return _validate_result(res), cloud_source
                 except Exception as e:
                     logger.warning(f"Cloud-only AI failed, falling back to heuristics: {e}")
+                    self._defer_provider("cloud", self._cloud_backoff_seconds(e), e)
             res = EmailClassifier.classify_with_heuristics(email_data)
             return _validate_result(res), AISource.HEURISTIC_FALLBACK
 
         # Mode: LOCAL_ONLY
         if mode == "LOCAL_ONLY":
-            try:
-                res = self.local_client.generate_json(prompt, CLASSIFICATION_SYSTEM_PROMPT)
-                if res:
-                    res["confidence"] = ConfidenceEvaluator.evaluate(res)
-                    return _validate_result(res), AISource.LOCAL_OLLAMA
-            except Exception as e:
-                logger.warning(f"Local-only AI failed, falling back to heuristics: {e}")
+            if not self._backoff_active("local"):
+                try:
+                    res = self.local_client.generate_json(prompt, CLASSIFICATION_SYSTEM_PROMPT)
+                    if res:
+                        self._clear_backoff("local")
+                        res["confidence"] = ConfidenceEvaluator.evaluate(res)
+                        return _validate_result(res), AISource.LOCAL_OLLAMA
+                except Exception as e:
+                    logger.warning(f"Local-only AI failed, falling back to heuristics: {e}")
+                    self._defer_provider("local", 300.0, e)
             res = EmailClassifier.classify_with_heuristics(email_data)
             return _validate_result(res), AISource.HEURISTIC_FALLBACK
 
         # Mode: HYBRID (Default & Recommended)
         # Step 1: Try Local AI first
         local_result = None
-        try:
-            local_result = self.local_client.generate_json(prompt, CLASSIFICATION_SYSTEM_PROMPT)
-        except Exception as e:
-            logger.debug(f"Local AI inference unavailable ({e}), routing to cloud/fallback...")
+        if not self._backoff_active("local"):
+            try:
+                local_result = self.local_client.generate_json(prompt, CLASSIFICATION_SYSTEM_PROMPT)
+                if local_result:
+                    self._clear_backoff("local")
+            except Exception as e:
+                logger.debug(f"Local AI inference unavailable ({e}), routing to cloud/fallback...")
+                self._defer_provider("local", 300.0, e)
 
         if local_result:
             confidence = ConfidenceEvaluator.evaluate(local_result)
@@ -136,15 +178,17 @@ class HybridAIRouter:
 
         # Step 2: Escalate to Cloud AI (Gemini preferred, fallback to OpenAI)
         cloud_client, cloud_source = self._get_cloud_client()
-        if cloud_client:
+        if cloud_client and not self._backoff_active("cloud"):
             try:
                 cloud_result = cloud_client.generate_json(prompt, CLASSIFICATION_SYSTEM_PROMPT)
                 if cloud_result:
+                    self._clear_backoff("cloud")
                     cloud_result["confidence"] = ConfidenceEvaluator.evaluate(cloud_result)
                     logger.info(f"Cloud AI ({cloud_source.value}) analysis completed.")
                     return _validate_result(cloud_result), cloud_source
             except Exception as e:
                 logger.warning(f"Cloud AI analysis failed: {e}")
+                self._defer_provider("cloud", self._cloud_backoff_seconds(e), e)
 
         # Step 3: Resilient Heuristic Fallback
         logger.info("Using Heuristic Rule Engine for email classification.")

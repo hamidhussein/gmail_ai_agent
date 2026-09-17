@@ -11,7 +11,7 @@ from ai.schemas import EmailClassificationResult
 from app.constants import EmailCategory, ActionType, RiskLevel, AISource
 from app.config import config_manager
 from automation.scheduler import BackgroundScheduler, should_create_cleanup_suggestion
-from core.events import EVT_SYNC_ERROR
+from core.events import EVT_SYNC_COMPLETED, EVT_SYNC_ERROR
 
 
 @pytest.fixture
@@ -162,3 +162,93 @@ def test_cleanup_suggestions_respect_confidence_threshold():
     assert should_create_cleanup_suggestion("MOVE_TRASH", 0.95, 0.85)
     assert not should_create_cleanup_suggestion("ARCHIVE", 0.84, 0.85)
     assert not should_create_cleanup_suggestion("LABEL", 0.99, 0.85)
+
+
+def test_sync_refreshes_classified_email_without_repeating_ai():
+    scheduler = BackgroundScheduler()
+    account = MagicMock(id=7, email="existing@test.com")
+    existing = MagicMock(account_id=7, category="WORK", ai_source="HEURISTIC")
+    email_data = {"message_id": "existing-1", "sender": "sender@test.com"}
+
+    with (
+        patch("automation.scheduler.repository.get_active_account", return_value=account),
+        patch("automation.scheduler.repository.get_email_by_message_id", return_value=existing),
+        patch("automation.scheduler.repository.save_or_update_email") as save_email,
+        patch("automation.scheduler.repository.update_account_synced_at") as update_synced,
+        patch("automation.scheduler.GmailReader") as reader_class,
+        patch("automation.scheduler.hybrid_router.classify_email") as classify,
+        patch("automation.scheduler.event_bus.publish") as publish,
+    ):
+        reader_class.return_value.fetch_and_parse_inbox.return_value = [email_data]
+        result = scheduler._execute_sync_task()
+
+    assert result.success
+    assert result.refreshed == 1
+    assert result.processed == 0
+    assert result.failed == 0
+    classify.assert_not_called()
+    save_email.assert_called_once_with(email_data)
+    update_synced.assert_called_once_with("existing@test.com")
+    assert any(call.args[0] == EVT_SYNC_COMPLETED for call in publish.call_args_list)
+
+
+def test_sync_isolates_one_bad_message_and_completes_remaining_batch():
+    scheduler = BackgroundScheduler()
+    account = MagicMock(id=8, email="partial@test.com")
+    emails = [
+        {"message_id": "bad-1", "sender": "bad@test.com"},
+        {"message_id": "good-1", "sender": "good@test.com"},
+    ]
+    classification = {
+        "category": "WORK",
+        "importance_score": 75,
+        "urgency_score": 60,
+        "risk_level": "LOW",
+        "confidence": 0.9,
+        "reasoning": "Work message",
+        "suggested_action": "KEEP",
+        "action_items": [],
+    }
+    saved = MagicMock(
+        suggested_action="KEEP",
+        ai_confidence=0.9,
+        category="WORK",
+        ai_reasoning="Work message",
+    )
+
+    with (
+        patch("automation.scheduler.repository.get_active_account", return_value=account),
+        patch("automation.scheduler.repository.get_email_by_message_id", return_value=None),
+        patch("automation.scheduler.repository.save_or_update_email", return_value=saved),
+        patch("automation.scheduler.repository.update_account_synced_at") as update_synced,
+        patch("automation.scheduler.GmailReader") as reader_class,
+        patch(
+            "automation.scheduler.hybrid_router.classify_email",
+            side_effect=[RuntimeError("bad message"), (classification, AISource.HEURISTIC_FALLBACK)],
+        ),
+        patch(
+            "automation.scheduler.preference_engine.adjust_email_importance",
+            return_value=(75, "WORK"),
+        ),
+    ):
+        reader_class.return_value.fetch_and_parse_inbox.return_value = emails
+        result = scheduler._execute_sync_task()
+
+    assert result.success
+    assert result.processed == 1
+    assert result.failed == 1
+    update_synced.assert_called_once_with("partial@test.com")
+
+
+def test_overlapping_sync_is_skipped_and_callback_is_released():
+    scheduler = BackgroundScheduler()
+    callback = MagicMock()
+    assert scheduler._sync_lock.acquire(blocking=False)
+    try:
+        result = scheduler._execute_sync_task(on_complete=callback)
+    finally:
+        scheduler._sync_lock.release()
+
+    assert result.skipped
+    assert not result.success
+    callback.assert_called_once_with()

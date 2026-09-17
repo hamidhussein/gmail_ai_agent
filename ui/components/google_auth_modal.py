@@ -230,7 +230,7 @@ class GoogleAuthDialog(ft.AlertDialog):
 
         if self.page_ref:
             try:
-                self.page_ref.open(ft.SnackBar(ft.Text(f"Welcome! Connected as {email}"), bgcolor=COLORS["success"]))
+                self.page_ref.show_dialog(ft.SnackBar(ft.Text(f"Welcome! Connected as {email}"), bgcolor=COLORS["success"]))
             except Exception:
                 pass
 
@@ -259,12 +259,12 @@ class GoogleAuthDialog(ft.AlertDialog):
         self._close_dialog()
         if self.page_ref:
             try:
-                self.page_ref.open(ft.SnackBar(ft.Text("Exploring in Demo Mode with sample dataset"), bgcolor=COLORS["primary"]))
+                self.page_ref.show_dialog(ft.SnackBar(ft.Text("Exploring in Demo Mode with sample dataset"), bgcolor=COLORS["primary"]))
             except Exception:
                 pass
 
     def _close_dialog(self):
         try:
-            self.page_ref.close(self)
+            self.page_ref.pop_dialog()
         except Exception:
             pass

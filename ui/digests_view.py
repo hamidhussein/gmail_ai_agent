@@ -182,7 +182,7 @@ class DailyDigestsView(ft.Container):
                 if gen_err is None:
                     if self.page_ref:
                         try:
-                            self.page_ref.open(ft.SnackBar(ft.Text("Today's briefing generated!"), bgcolor=COLORS["success"]))
+                            self.page_ref.show_dialog(ft.SnackBar(ft.Text("Today's briefing generated!"), bgcolor=COLORS["success"]))
                         except Exception:
                             pass
                     self.load_digests()
@@ -191,7 +191,7 @@ class DailyDigestsView(ft.Container):
                     msg = format_user_error(gen_err, "generate daily briefing")
                     if self.page_ref:
                         try:
-                            self.page_ref.open(ft.SnackBar(ft.Text(msg), bgcolor=COLORS["danger"]))
+                            self.page_ref.show_dialog(ft.SnackBar(ft.Text(msg), bgcolor=COLORS["danger"]))
                         except Exception:
                             pass
                 safe_update(self.page_ref)

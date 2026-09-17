@@ -273,7 +273,7 @@ class GmailAIApp:
             account_email=email,
         )
         try:
-            self.page.open(dialog)
+            self.page.show_dialog(dialog)
         except Exception:
             pass
 
@@ -527,7 +527,7 @@ class GmailAIApp:
 
     def _show_toast(self, message: str) -> None:
         try:
-            self.page.open(ft.SnackBar(ft.Text(message), bgcolor=COLORS["primary"]))
+            self.page.show_dialog(ft.SnackBar(ft.Text(message), bgcolor=COLORS["primary"]))
             self.page.update()
         except Exception:
             pass

@@ -32,6 +32,7 @@ from ui.components.google_auth_modal import GoogleAuthDialog
 from database.repository import repository
 from database.migrations import seed_demo_data
 from ai.local_model import LocalOllamaClient
+from ai.ollama_service import ollama_service_controller
 from memory.user_profile import user_profile_manager
 from automation.scheduler import scheduler
 
@@ -100,6 +101,19 @@ class SettingsView(ft.Container):
             bgcolor=COLORS["primary"],
             color="#FFFFFF",
             on_click=lambda e: self._test_ollama(),
+        )
+        self.ollama_start_button = ft.ElevatedButton(
+            "Start",
+            icon=ft.Icons.PLAY_ARROW,
+            bgcolor=COLORS["success"],
+            color="#FFFFFF",
+            on_click=lambda e: self._run_ollama_service_action("start"),
+        )
+        self.ollama_stop_button = ft.OutlinedButton(
+            "Stop",
+            icon=ft.Icons.STOP_CIRCLE_OUTLINED,
+            style=ft.ButtonStyle(color=COLORS["danger"]),
+            on_click=lambda e: self._run_ollama_service_action("stop"),
         )
         self.ollama_test_progress = ft.ProgressRing(width=18, height=18, stroke_width=2, visible=False)
         self.ollama_status_text = ft.Text("", size=12, color=COLORS["text_secondary"], visible=False)
@@ -262,6 +276,8 @@ class SettingsView(ft.Container):
                         ft.Row([
                             self.ollama_url_field,
                             self.ollama_model_field,
+                            self.ollama_start_button,
+                            self.ollama_stop_button,
                             self.ollama_test_button,
                         ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
                         ft.Row([
@@ -734,8 +750,20 @@ class SettingsView(ft.Container):
             self._toast("No active account to sync. Sign in with Google first.", COLORS["warning"])
             return
         self._toast(f"Syncing {account.email}...", COLORS["primary"])
+
+        def notify_result():
+            result = scheduler.last_result
+            if result is None:
+                self._toast("Sync finished.", COLORS["success"])
+            elif result.success:
+                color = COLORS["warning"] if result.failed else COLORS["success"]
+                self._toast(result.summary, color)
+            else:
+                color = COLORS["warning"] if result.skipped else COLORS["danger"]
+                self._toast(result.summary, color)
+
         try:
-            scheduler.trigger_sync_now(on_complete=lambda: self._toast("Sync complete!", COLORS["success"]))
+            scheduler.trigger_sync_now(on_complete=notify_result)
         except Exception as ex:
             self._toast(f"Sync error: {ex}", COLORS["danger"])
 
@@ -850,6 +878,67 @@ class SettingsView(ft.Container):
     # =====================================================================
     # Other Actions
     # =====================================================================
+    def _set_ollama_controls_busy(self, busy: bool, message: str = "") -> None:
+        self.ollama_start_button.disabled = busy
+        self.ollama_stop_button.disabled = busy
+        self.ollama_test_button.disabled = busy
+        self.ollama_test_progress.visible = busy
+        if message:
+            self.ollama_status_text.value = message
+            self.ollama_status_text.color = COLORS["primary"]
+            self.ollama_status_text.visible = True
+        safe_update(self.ollama_start_button)
+        safe_update(self.ollama_stop_button)
+        safe_update(self.ollama_test_button)
+        safe_update(self.ollama_test_progress)
+        safe_update(self.ollama_status_text)
+
+    def _run_ollama_service_action(self, action: str) -> None:
+        """Start or stop Ollama in a worker so the settings UI stays responsive."""
+        url = (self.ollama_url_field.value or "").strip()
+        if not url:
+            self._show_ollama_result(False, "Enter the Ollama endpoint first.")
+            return
+
+        config_manager.config.ollama_url = url
+        config_manager.save()
+        verb = "Starting" if action == "start" else "Stopping"
+        self._set_ollama_controls_busy(True, f"{verb} Ollama...")
+
+        def worker():
+            try:
+                if action == "start":
+                    success, message = ollama_service_controller.start(url)
+                else:
+                    success, message = ollama_service_controller.stop(url)
+                running = ollama_service_controller.is_running(url)
+            except Exception as ex:
+                success, message, running = False, f"Ollama {action} failed: {ex}", None
+
+            try:
+                self.page_ref.run_task(
+                    self._finish_ollama_service_action,
+                    success,
+                    message,
+                    running,
+                )
+            except Exception:
+                self._show_ollama_result(success, message, running=running)
+
+        threading.Thread(
+            target=worker,
+            name=f"GmailAIOllama{action.title()}",
+            daemon=True,
+        ).start()
+
+    async def _finish_ollama_service_action(
+        self,
+        success: bool,
+        message: str,
+        running: Optional[bool],
+    ) -> None:
+        self._show_ollama_result(success, message, running=running)
+
     def _test_ollama(self):
         url = self.ollama_url_field.value.strip()
         model = self.ollama_model_field.value.strip()
@@ -861,14 +950,7 @@ class SettingsView(ft.Container):
         config_manager.config.ollama_model = model
         config_manager.save()
 
-        self.ollama_test_button.disabled = True
-        self.ollama_test_progress.visible = True
-        self.ollama_status_text.value = "Testing Ollama service and selected model..."
-        self.ollama_status_text.color = COLORS["primary"]
-        self.ollama_status_text.visible = True
-        safe_update(self.ollama_test_button)
-        safe_update(self.ollama_test_progress)
-        safe_update(self.ollama_status_text)
+        self._set_ollama_controls_busy(True, "Testing Ollama service and selected model...")
 
         def worker():
             try:
@@ -887,12 +969,21 @@ class SettingsView(ft.Container):
     async def _finish_ollama_test(self, success: bool, message: str) -> None:
         self._show_ollama_result(success, message)
 
-    def _show_ollama_result(self, success: bool, message: str) -> None:
+    def _show_ollama_result(
+        self,
+        success: bool,
+        message: str,
+        running: Optional[bool] = None,
+    ) -> None:
+        self.ollama_start_button.disabled = running is True
+        self.ollama_stop_button.disabled = running is False
         self.ollama_test_button.disabled = False
         self.ollama_test_progress.visible = False
         self.ollama_status_text.value = message
         self.ollama_status_text.color = COLORS["success"] if success else COLORS["danger"]
         self.ollama_status_text.visible = True
+        safe_update(self.ollama_start_button)
+        safe_update(self.ollama_stop_button)
         safe_update(self.ollama_test_button)
         safe_update(self.ollama_test_progress)
         safe_update(self.ollama_status_text)
@@ -941,6 +1032,6 @@ class SettingsView(ft.Container):
 
     def _toast(self, message: str, color: str):
         try:
-            self.page_ref.open(ft.SnackBar(ft.Text(message), bgcolor=color))
+            self.page_ref.show_dialog(ft.SnackBar(ft.Text(message), bgcolor=color))
         except Exception:
             pass

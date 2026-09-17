@@ -406,6 +406,17 @@ class DashboardView(ft.Container):
             safe_update(self.page_ref)
 
     def _on_sync_done(self) -> None:
+        result = scheduler.last_result
+        if result is None:
+            message = "Gmail sync finished."
+            color = COLORS["success"]
+        elif result.success:
+            message = result.summary
+            color = COLORS["warning"] if result.failed else COLORS["success"]
+        else:
+            message = result.summary
+            color = COLORS["warning"] if result.skipped else COLORS["danger"]
+
         async def _apply_sync_done():
             self.sync_spinner.visible = False
             self.sync_btn.disabled = False
@@ -415,7 +426,7 @@ class DashboardView(ft.Container):
                 pass
             if self.page_ref:
                 try:
-                    self.page_ref.open(ft.SnackBar(ft.Text("Gmail sync completed!"), bgcolor=COLORS["success"]))
+                    self.page_ref.show_dialog(ft.SnackBar(ft.Text(message), bgcolor=color))
                 except Exception:
                     pass
             safe_update(self.page_ref)

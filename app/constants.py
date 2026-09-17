@@ -25,6 +25,7 @@ class ActionType(str, Enum):
     STAR = "STAR"
     MOVE_TRASH = "MOVE_TRASH"
     DRAFT_REPLY = "DRAFT_REPLY"
+    SEND_REPLY = "SEND_REPLY"
     KEEP = "KEEP"
 
 

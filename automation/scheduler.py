@@ -6,10 +6,17 @@ import json
 import threading
 import datetime
 import logging
+from dataclasses import dataclass
 from typing import Optional, Callable
 
 from app.config import config_manager
-from core.events import event_bus, EVT_SYNC_STARTED, EVT_SYNC_COMPLETED, EVT_SYNC_ERROR
+from core.events import (
+    event_bus,
+    EVT_SYNC_STARTED,
+    EVT_SYNC_PROGRESS,
+    EVT_SYNC_COMPLETED,
+    EVT_SYNC_ERROR,
+)
 from database.repository import repository
 from gmail.reader import GmailReader
 from ai.router import hybrid_router
@@ -28,6 +35,31 @@ def should_create_cleanup_suggestion(action: str, confidence: float, threshold: 
     return action in {"ARCHIVE", "MOVE_TRASH"} and (confidence or 0.0) >= threshold
 
 
+@dataclass(frozen=True)
+class SyncResult:
+    """Immutable summary of one synchronization attempt."""
+
+    success: bool
+    account_email: Optional[str] = None
+    fetched: int = 0
+    processed: int = 0
+    refreshed: int = 0
+    failed: int = 0
+    skipped: bool = False
+    error: Optional[str] = None
+
+    @property
+    def summary(self) -> str:
+        if self.skipped:
+            return self.error or "A sync is already in progress."
+        if not self.success:
+            return self.error or "Sync failed."
+        details = f"{self.processed} analyzed, {self.refreshed} refreshed"
+        if self.failed:
+            details += f", {self.failed} failed"
+        return f"Sync complete: {details}."
+
+
 class BackgroundScheduler:
     """Threaded background scheduler for background email synchronization and AI processing."""
 
@@ -37,6 +69,30 @@ class BackgroundScheduler:
         self._last_digest_date: Optional[str] = None
         self._is_syncing = False
         self._sync_lock = threading.Lock()
+        self._result_lock = threading.Lock()
+        self._last_result: Optional[SyncResult] = None
+
+    @property
+    def is_syncing(self) -> bool:
+        return self._is_syncing
+
+    @property
+    def last_result(self) -> Optional[SyncResult]:
+        with self._result_lock:
+            return self._last_result
+
+    def _store_result(self, result: SyncResult) -> None:
+        with self._result_lock:
+            self._last_result = result
+
+    @staticmethod
+    def _run_callback(callback: Optional[Callable[[], None]]) -> None:
+        if not callback:
+            return
+        try:
+            callback()
+        except Exception as exc:
+            logger.error(f"Error in on_complete callback: {exc}")
 
     def start(self) -> None:
         """Starts background scheduler thread."""
@@ -87,22 +143,31 @@ class BackgroundScheduler:
                     break
                 time.sleep(2)
 
-    def _execute_sync_task(self, on_complete: Optional[Callable[[], None]] = None) -> None:
+    def _execute_sync_task(self, on_complete: Optional[Callable[[], None]] = None) -> SyncResult:
         """Performs email fetch, hybrid AI analysis, and suggestion creation."""
         if not self._sync_lock.acquire(blocking=False):
-            logger.debug("Sync already in progress, skipping.")
-            return
+            result = SyncResult(
+                success=False,
+                skipped=True,
+                error="A sync is already in progress.",
+            )
+            self._store_result(result)
+            logger.info(result.error)
+            self._run_callback(on_complete)
+            return result
 
         self._is_syncing = True
-        event_bus.publish(EVT_SYNC_STARTED)
+        result = SyncResult(success=False, error="Sync did not complete.")
 
         try:
             account = repository.get_active_account()
             if not account:
-                logger.debug("No active account for sync.")
-                return
+                result = SyncResult(success=False, error="No active Gmail account is connected.")
+                event_bus.publish(EVT_SYNC_ERROR, result.error)
+                return result
 
             account_email = account.email
+            event_bus.publish(EVT_SYNC_STARTED, {"account_email": account_email})
             reader = GmailReader(email=account_email)
             max_emails = config_manager.config.max_emails_per_sync
 
@@ -115,64 +180,112 @@ class BackgroundScheduler:
                 else:
                     raise
 
-            for email_dict in raw_emails:
-                # Run through Hybrid AI Router (output is already validated)
-                classification, source = hybrid_router.classify_email(email_dict)
+            processed = 0
+            refreshed = 0
+            failed = 0
+            total = len(raw_emails)
 
-                raw_importance = classification.get("importance_score", 50)
-                raw_category = classification.get("category", "PERSONAL")
+            for index, email_dict in enumerate(raw_emails, start=1):
+                if self._stop_event.is_set():
+                    logger.info("Sync interrupted during application shutdown.")
+                    break
 
-                # Apply learned preferences & VIP adjustments
-                final_importance, final_category = preference_engine.adjust_email_importance(
-                    sender_email=email_dict["sender"],
-                    initial_importance=raw_importance,
-                    initial_category=raw_category,
-                )
-
-                email_dict["category"] = final_category
-                email_dict["importance_score"] = final_importance
-                email_dict["urgency_score"] = classification.get("urgency_score", 50)
-                email_dict["risk_level"] = classification.get("risk_level", "LOW")
-                email_dict["ai_source"] = source.value
-                email_dict["ai_confidence"] = classification.get("confidence", 0.8)
-                email_dict["ai_reasoning"] = classification.get("reasoning", "")
-                email_dict["suggested_action"] = classification.get("suggested_action", "KEEP")
-                email_dict["action_items_json"] = json.dumps(classification.get("action_items", []))
-
-                # Save email to DB
-                saved = repository.save_or_update_email(email_dict)
-
-                # If cleanup suggested, create suggestion record
-                if should_create_cleanup_suggestion(
-                    saved.suggested_action,
-                    saved.ai_confidence,
-                    config_manager.config.hybrid_confidence_threshold,
-                ):
-                    repository.create_suggestion(
-                        email_id=saved.id,
-                        action_type=saved.suggested_action,
-                        category=saved.category,
-                        reason=saved.ai_reasoning,
-                        confidence=saved.ai_confidence,
+                message_id = email_dict.get("message_id", "unknown")
+                try:
+                    existing = repository.get_email_by_message_id(message_id)
+                    already_classified = bool(
+                        existing
+                        and existing.account_id == account.id
+                        and existing.category
+                        and existing.ai_source
                     )
+
+                    if already_classified:
+                        # Gmail flags and message content can change even when the
+                        # AI classification does not. Update only the fetched raw
+                        # fields and preserve the existing intelligence columns.
+                        repository.save_or_update_email(email_dict)
+                        refreshed += 1
+                    else:
+                        classification, source = hybrid_router.classify_email(email_dict)
+                        raw_importance = classification.get("importance_score", 50)
+                        raw_category = classification.get("category", "PERSONAL")
+                        final_importance, final_category = preference_engine.adjust_email_importance(
+                            sender_email=email_dict["sender"],
+                            initial_importance=raw_importance,
+                            initial_category=raw_category,
+                        )
+
+                        email_dict["category"] = final_category
+                        email_dict["importance_score"] = final_importance
+                        email_dict["urgency_score"] = classification.get("urgency_score", 50)
+                        email_dict["risk_level"] = classification.get("risk_level", "LOW")
+                        email_dict["ai_source"] = source.value
+                        email_dict["ai_confidence"] = classification.get("confidence", 0.8)
+                        email_dict["ai_reasoning"] = classification.get("reasoning", "")
+                        email_dict["suggested_action"] = classification.get("suggested_action", "KEEP")
+                        email_dict["action_items_json"] = json.dumps(classification.get("action_items", []))
+
+                        saved = repository.save_or_update_email(email_dict)
+                        processed += 1
+
+                        if should_create_cleanup_suggestion(
+                            saved.suggested_action,
+                            saved.ai_confidence,
+                            config_manager.config.hybrid_confidence_threshold,
+                        ):
+                            repository.create_suggestion(
+                                email_id=saved.id,
+                                action_type=saved.suggested_action,
+                                category=saved.category,
+                                reason=saved.ai_reasoning,
+                                confidence=saved.ai_confidence,
+                            )
+                except Exception as email_error:
+                    failed += 1
+                    logger.error(
+                        f"Could not process Gmail message {message_id}: {email_error}",
+                        exc_info=True,
+                    )
+
+                event_bus.publish(
+                    EVT_SYNC_PROGRESS,
+                    {
+                        "account_email": account_email,
+                        "current": index,
+                        "total": total,
+                        "processed": processed,
+                        "refreshed": refreshed,
+                        "failed": failed,
+                    },
+                )
 
             # Update last_synced_at via the repository (no detached-object access)
             repository.update_account_synced_at(account_email)
 
-            event_bus.publish(EVT_SYNC_COMPLETED, len(raw_emails))
-            logger.info(f"Sync complete. Processed {len(raw_emails)} emails.")
+            result = SyncResult(
+                success=True,
+                account_email=account_email,
+                fetched=total,
+                processed=processed,
+                refreshed=refreshed,
+                failed=failed,
+                error=f"{failed} message(s) could not be processed." if failed else None,
+            )
+            event_bus.publish(EVT_SYNC_COMPLETED, result)
+            logger.info(result.summary)
 
         except Exception as e:
             logger.error(f"Sync error: {e}", exc_info=True)
-            event_bus.publish(EVT_SYNC_ERROR, str(e))
+            result = SyncResult(success=False, error=str(e))
+            event_bus.publish(EVT_SYNC_ERROR, result.error)
         finally:
+            self._store_result(result)
             self._is_syncing = False
             self._sync_lock.release()
-            if on_complete:
-                try:
-                    on_complete()
-                except Exception as e:
-                    logger.error(f"Error in on_complete callback: {e}")
+            self._run_callback(on_complete)
+
+        return result
 
 
 scheduler = BackgroundScheduler()

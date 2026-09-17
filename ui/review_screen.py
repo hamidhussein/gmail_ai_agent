@@ -310,7 +310,7 @@ class ReviewScreenView(ft.Container):
 
     def _approve_single(self, sugg: CleanupSuggestion, email: EmailRecord):
         if not self._is_supported_action(sugg.action_type):
-            self.page_ref.open(
+            self.page_ref.show_dialog(
                 ft.SnackBar(
                     ft.Text("This suggestion requires manual review and cannot be run as cleanup."),
                     bgcolor=COLORS["warning"],
@@ -329,10 +329,10 @@ class ReviewScreenView(ft.Container):
             )
 
             def cancel(e):
-                self.page_ref.close(dialog)
+                self.page_ref.pop_dialog()
 
             def confirm(e):
-                self.page_ref.close(dialog)
+                self.page_ref.pop_dialog()
                 self._execute_single(sugg, email)
 
             dialog.actions = [
@@ -345,7 +345,7 @@ class ReviewScreenView(ft.Container):
                     on_click=confirm,
                 ),
             ]
-            self.page_ref.open(dialog)
+            self.page_ref.show_dialog(dialog)
             return
 
         self._execute_single(sugg, email)
@@ -377,7 +377,7 @@ class ReviewScreenView(ft.Container):
             event_bus.publish(EVT_SUGGESTION_ACTIONED, sugg.id)
 
             try:
-                self.page_ref.open(ft.SnackBar(ft.Text(f"Cleaned: {email.subject[:30]}..."), bgcolor=COLORS["success"]))
+                self.page_ref.show_dialog(ft.SnackBar(ft.Text(f"Cleaned: {email.subject[:30]}..."), bgcolor=COLORS["success"]))
             except Exception:
                 pass
             self.load_suggestions()
@@ -385,7 +385,7 @@ class ReviewScreenView(ft.Container):
             logger.error(f"Error approving suggestion: {sanitize_error(ex, 'single_approve')}")
             try:
                 msg = format_user_error(ex, "clean email")
-                self.page_ref.open(ft.SnackBar(ft.Text(msg), bgcolor=COLORS["danger"]))
+                self.page_ref.show_dialog(ft.SnackBar(ft.Text(msg), bgcolor=COLORS["danger"]))
             except Exception:
                 pass
 
@@ -393,7 +393,7 @@ class ReviewScreenView(ft.Container):
         repository.update_suggestion_status(sugg.id, SuggestionStatus.REJECTED.value)
         event_bus.publish(EVT_SUGGESTION_ACTIONED, sugg.id)
         try:
-            self.page_ref.open(ft.SnackBar(ft.Text("Suggestion dismissed"), bgcolor=COLORS["text_secondary"]))
+            self.page_ref.show_dialog(ft.SnackBar(ft.Text("Suggestion dismissed"), bgcolor=COLORS["text_secondary"]))
         except Exception:
             pass
         self.load_suggestions()
@@ -409,7 +409,7 @@ class ReviewScreenView(ft.Container):
 
         if not self.selected_suggestion_ids:
             try:
-                self.page_ref.open(ft.SnackBar(ft.Text("Please select at least one suggestion."), bgcolor=COLORS["warning"]))
+                self.page_ref.show_dialog(ft.SnackBar(ft.Text("Please select at least one suggestion."), bgcolor=COLORS["warning"]))
             except Exception:
                 pass
             return
@@ -431,10 +431,10 @@ class ReviewScreenView(ft.Container):
             )
 
             def cancel(e):
-                self.page_ref.close(dialog)
+                self.page_ref.pop_dialog()
 
             def confirm(e):
-                self.page_ref.close(dialog)
+                self.page_ref.pop_dialog()
                 self._execute_bulk_approve()
 
             dialog.actions = [
@@ -447,7 +447,7 @@ class ReviewScreenView(ft.Container):
                     on_click=confirm,
                 ),
             ]
-            self.page_ref.open(dialog)
+            self.page_ref.show_dialog(dialog)
             return
 
         self._execute_bulk_approve()
@@ -534,7 +534,7 @@ class ReviewScreenView(ft.Container):
 
     async def _finish_bulk_auth_error(self) -> None:
         self._set_bulk_running(False)
-        self.page_ref.open(
+        self.page_ref.show_dialog(
             ft.SnackBar(
                 ft.Text("Gmail authorization expired. Reconnect Google, then retry cleanup."),
                 bgcolor=COLORS["danger"],
@@ -553,7 +553,7 @@ class ReviewScreenView(ft.Container):
             msg_color = COLORS["success"]
 
         try:
-            self.page_ref.open(
+            self.page_ref.show_dialog(
                 ft.SnackBar(
                     ft.Text(result.summary_message("cleaned")),
                     bgcolor=msg_color,
@@ -572,7 +572,7 @@ class ReviewScreenView(ft.Container):
         )
         event_bus.publish(EVT_SUGGESTION_ACTIONED, dismissed_count)
         try:
-            self.page_ref.open(
+            self.page_ref.show_dialog(
                 ft.SnackBar(
                     ft.Text(f"Dismissed {dismissed_count} suggestion{'s' if dismissed_count != 1 else ''}"),
                     bgcolor=COLORS["text_secondary"],

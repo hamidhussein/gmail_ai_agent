@@ -5,8 +5,10 @@ import re
 import html
 import json
 import datetime
+import threading
 import flet as ft
 from typing import Dict, Any, List, Optional
+from app.constants import ReplyTone
 from resources.styles.theme import (
     COLORS,
     get_category_color,
@@ -22,7 +24,9 @@ from resources.styles.theme import (
 from ui.components.reply_modal import ReplyDialog
 from database.repository import repository
 from gmail.actions import gmail_actions
+from ai.reply_generator import reply_generator
 from memory.learning import learning_engine
+from memory.user_profile import user_profile_manager
 from core.events import event_bus, EVT_SUGGESTION_ACTIONED, EVT_SYNC_COMPLETED
 
 AVATAR_PALETTE = [
@@ -139,8 +143,8 @@ class InboxIntelligenceView(ft.Container):
         self.star_btn_refs: Dict[int, ft.IconButton] = {}
 
         # Detail view star & read button refs for live updates
-        self.detail_star_btn: Optional[ft.OutlinedButton] = None
-        self.detail_read_btn: Optional[ft.OutlinedButton] = None
+        self.detail_star_btn: Optional[ft.IconButton] = None
+        self.detail_read_btn: Optional[ft.IconButton] = None
 
         # Top search field with clear suffix
         self.clear_search_btn = ft.IconButton(
@@ -501,6 +505,64 @@ class InboxIntelligenceView(ft.Container):
             visible=getattr(email, "has_attachments", False),
         )
 
+        # Action items count badge
+        action_items_raw = getattr(email, "action_items_json", None) or getattr(email, "action_items", None)
+        task_count = 0
+        if action_items_raw:
+            try:
+                tasks = json.loads(action_items_raw) if isinstance(action_items_raw, str) else action_items_raw
+                if isinstance(tasks, list):
+                    task_count = len(tasks)
+            except Exception:
+                task_count = 0
+
+        urgency = getattr(email, "urgency_score", 0) or 0
+        risk = getattr(email, "risk_level", "LOW") or "LOW"
+
+        sub_badges = []
+        if urgency >= 70 or risk in ("HIGH", "CRITICAL"):
+            sub_badges.append(
+                ft.Container(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.BOLT, size=10, color="#FFFFFF"),
+                        ft.Text("URGENT", size=8, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
+                    ], spacing=1, tight=True),
+                    bgcolor=COLORS["danger"] if risk in ("HIGH", "CRITICAL") else COLORS["warning"],
+                    padding=padding_symmetric(horizontal=4, vertical=1),
+                    border_radius=3,
+                    tooltip=f"Urgency score: {urgency}/100 • Risk: {risk}",
+                )
+            )
+        if task_count > 0:
+            sub_badges.append(
+                ft.Container(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.CHECKLIST, size=10, color=COLORS["primary"]),
+                        ft.Text(f"{task_count}", size=8, weight=ft.FontWeight.BOLD, color=COLORS["primary"]),
+                    ], spacing=2, tight=True),
+                    bgcolor=COLORS["badge_bg"],
+                    padding=padding_symmetric(horizontal=4, vertical=1),
+                    border_radius=3,
+                    tooltip=f"{task_count} action item{'s' if task_count != 1 else ''}",
+                )
+            )
+
+        right_col_controls = [
+            ft.Row([
+                ft.Container(
+                    content=ft.Text(cat[:6], size=9, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
+                    bgcolor=cat_color,
+                    padding=padding_symmetric(horizontal=5, vertical=2),
+                    border_radius=4,
+                ),
+                star_btn,
+            ], spacing=2, vertical_alignment=ft.CrossAxisAlignment.CENTER, tight=True),
+        ]
+        if sub_badges:
+            right_col_controls.append(
+                ft.Row(sub_badges, spacing=3, tight=True, alignment=ft.MainAxisAlignment.END)
+            )
+
         card = ft.Container(
             content=ft.Row([
                 # Left indicator & Avatar
@@ -535,18 +597,12 @@ class InboxIntelligenceView(ft.Container):
                     ),
                 ], expand=True, spacing=2),
 
-                # Right: category badge + star only (no score text)
-                ft.Column([
-                    ft.Row([
-                        ft.Container(
-                            content=ft.Text(cat[:6], size=9, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
-                            bgcolor=cat_color,
-                            padding=padding_symmetric(horizontal=5, vertical=2),
-                            border_radius=4,
-                        ),
-                        star_btn,
-                    ], spacing=2, vertical_alignment=ft.CrossAxisAlignment.CENTER, tight=True),
-                ], horizontal_alignment=ft.CrossAxisAlignment.END, spacing=2),
+                # Right: category badge + star + indicators
+                ft.Column(
+                    right_col_controls,
+                    horizontal_alignment=ft.CrossAxisAlignment.END,
+                    spacing=2,
+                ),
             ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=7),
             bgcolor=COLORS["badge_bg"] if is_selected else COLORS["bg_card"],
             border=border_only(
@@ -657,13 +713,13 @@ class InboxIntelligenceView(ft.Container):
             self.selected_email["is_starred"] = new_starred
             if self.detail_star_btn:
                 self.detail_star_btn.icon = ft.Icons.STAR if new_starred else ft.Icons.STAR_BORDER
-                self.detail_star_btn.text = "Starred" if new_starred else "Star"
-                self.detail_star_btn.style.color = COLORS["warning"] if new_starred else COLORS["text_secondary"]
+                self.detail_star_btn.icon_color = COLORS["warning"] if new_starred else COLORS["text_muted"]
+                self.detail_star_btn.tooltip = "Unstar" if new_starred else "Star"
                 safe_update(self.detail_star_btn)
 
         msg = "Email starred" if new_starred else "Email unstarred"
         try:
-            self.page_ref.open(ft.SnackBar(ft.Text(msg), bgcolor=COLORS["warning"] if new_starred else COLORS["text_secondary"]))
+            self.page_ref.show_dialog(ft.SnackBar(ft.Text(msg), bgcolor=COLORS["warning"] if new_starred else COLORS["text_secondary"]))
         except Exception:
             pass
 
@@ -692,7 +748,7 @@ class InboxIntelligenceView(ft.Container):
 
         msg = "Email starred" if new_starred else "Email unstarred"
         try:
-            self.page_ref.open(ft.SnackBar(ft.Text(msg), bgcolor=COLORS["warning"] if new_starred else COLORS["text_secondary"]))
+            self.page_ref.show_dialog(ft.SnackBar(ft.Text(msg), bgcolor=COLORS["warning"] if new_starred else COLORS["text_secondary"]))
         except Exception:
             pass
 
@@ -734,7 +790,7 @@ class InboxIntelligenceView(ft.Container):
         event_bus.publish(EVT_SUGGESTION_ACTIONED, 1)
         msg = "Marked as unread" if new_unread else "Marked as read"
         try:
-            self.page_ref.open(ft.SnackBar(ft.Text(msg), bgcolor=COLORS["primary"]))
+            self.page_ref.show_dialog(ft.SnackBar(ft.Text(msg), bgcolor=COLORS["primary"]))
         except Exception:
             pass
 
@@ -782,24 +838,23 @@ class InboxIntelligenceView(ft.Container):
 
         body_content = data.get("body_plain") or data.get("snippet") or "(Empty message body)"
 
-        # Detail Star Button
-        self.detail_star_btn = ft.OutlinedButton(
-            "Starred" if is_starred else "Star",
+        # Pinned Toolbar action buttons
+        star_btn = ft.IconButton(
             icon=ft.Icons.STAR if is_starred else ft.Icons.STAR_BORDER,
-            style=ft.ButtonStyle(
-                shape=ft.RoundedRectangleBorder(radius=8),
-                color=COLORS["warning"] if is_starred else COLORS["text_secondary"],
-            ),
+            icon_size=18,
+            icon_color=COLORS["warning"] if is_starred else COLORS["text_muted"],
+            tooltip="Star" if not is_starred else "Unstar",
             on_click=lambda e: self._toggle_star_from_detail(data),
         )
-
-        # Detail Read/Unread Button
-        self.detail_read_btn = ft.OutlinedButton(
-            "Mark as Read" if is_unread else "Mark as Unread",
+        read_btn = ft.IconButton(
             icon=ft.Icons.MARK_EMAIL_READ_OUTLINED if is_unread else ft.Icons.MARK_EMAIL_UNREAD_OUTLINED,
-            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+            icon_size=18,
+            icon_color=COLORS["text_secondary"],
+            tooltip="Mark as Read" if is_unread else "Mark as Unread",
             on_click=lambda e: self._toggle_read_status(data),
         )
+        self.detail_star_btn = star_btn
+        self.detail_read_btn = read_btn
 
         self.detail_container.content = ft.Column(
             expand=True,
@@ -808,29 +863,21 @@ class InboxIntelligenceView(ft.Container):
                 # Pinned Toolbar (non-scrollable)
                 ft.Container(
                     content=ft.Row([
-                        ft.IconButton(
+                        ft.ElevatedButton(
+                            "Reply with AI",
                             icon=ft.Icons.AUTO_AWESOME,
-                            icon_size=18,
-                            icon_color=COLORS["primary"],
-                            tooltip="AI Reply Assistant",
+                            style=ft.ButtonStyle(
+                                bgcolor=COLORS["primary"],
+                                color="#FFFFFF",
+                                shape=ft.RoundedRectangleBorder(radius=6),
+                                padding=padding_symmetric(horizontal=12, vertical=6),
+                            ),
+                            tooltip="Open Full AI Auto-Reply Assistant Dialog",
                             on_click=lambda e: self._open_reply_dialog(data),
                         ),
-                        ft.Container(width=1, height=20, bgcolor=COLORS["border"]),
-                        ft.IconButton(
-                            ref=None,
-                            icon=ft.Icons.STAR if is_starred else ft.Icons.STAR_BORDER,
-                            icon_size=18,
-                            icon_color=COLORS["warning"] if is_starred else COLORS["text_muted"],
-                            tooltip="Star" if not is_starred else "Unstar",
-                            on_click=lambda e: self._toggle_star_from_detail(data),
-                        ),
-                        ft.IconButton(
-                            icon=ft.Icons.MARK_EMAIL_READ_OUTLINED if is_unread else ft.Icons.MARK_EMAIL_UNREAD_OUTLINED,
-                            icon_size=18,
-                            icon_color=COLORS["text_secondary"],
-                            tooltip="Mark as Read" if is_unread else "Mark as Unread",
-                            on_click=lambda e: self._toggle_read_status(data),
-                        ),
+                        ft.Container(width=1, height=18, bgcolor=COLORS["border"]),
+                        star_btn,
+                        read_btn,
                         ft.IconButton(
                             icon=ft.Icons.ARCHIVE_OUTLINED,
                             icon_size=18,
@@ -853,10 +900,10 @@ class InboxIntelligenceView(ft.Container):
                             tooltip="Copy body to clipboard",
                             on_click=lambda e: self._copy_to_clipboard(body_content),
                         ),
-                    ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
+                    ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=6),
                     bgcolor=COLORS["surface_alt"],
                     border=border_only(bottom=ft.BorderSide(1, COLORS["border"])),
-                    padding=padding_symmetric(horizontal=10, vertical=2),
+                    padding=padding_symmetric(horizontal=12, vertical=6),
                 ),
 
                 # Scrollable Content Area
@@ -977,30 +1024,308 @@ class InboxIntelligenceView(ft.Container):
                             border_radius=8,
                             margin=padding_symmetric(horizontal=16, vertical=4),
                         ),
+
+                        # Quick AI Auto-Reply Assistant Card
+                        self._build_quick_reply_section(data),
                     ],
                 ),
             ],
         )
-        # Store button refs for live updates
-        toolbar = self.detail_container.content.controls[0].content
-        # Rebuild refs for star and read toggle buttons from the slim icon toolbar
-        star_btn_in_toolbar = toolbar.controls[2]  # star button is index 2
-        read_btn_in_toolbar = toolbar.controls[3]  # read button is index 3
-        self.detail_star_btn = star_btn_in_toolbar
-        self.detail_read_btn = read_btn_in_toolbar
         safe_update(self.detail_container)
+
+    def _build_quick_reply_section(self, data: Dict[str, Any]) -> ft.Container:
+        """Builds an embedded Quick AI Reply Assistant card directly below the email body."""
+        current_tone = [ReplyTone.PROFESSIONAL.value]
+        active_prompt = [""]
+
+        tones = [
+            (ReplyTone.PROFESSIONAL.value, "Professional", ft.Icons.BUSINESS_CENTER_OUTLINED),
+            (ReplyTone.FRIENDLY.value, "Friendly", ft.Icons.SENTIMENT_SATISFIED_ALT),
+            (ReplyTone.SHORT.value, "Concise", ft.Icons.SHORT_TEXT),
+            (ReplyTone.DETAILED.value, "Detailed", ft.Icons.SUBJECT),
+            (ReplyTone.FOLLOW_UP.value, "Follow-up", ft.Icons.UPDATE),
+        ]
+
+        prompt_presets = [
+            "Confirm agreement & next steps",
+            "Decline politely with thanks",
+            "Request revised proposal / pricing",
+            "Ask to schedule a 15-min sync",
+        ]
+
+        status_text = ft.Text(
+            "Instant AI auto-reply ready \u2022 Select tone or prompt below",
+            size=11,
+            color=COLORS["text_muted"],
+        )
+
+        draft_field = ft.TextField(
+            value="",
+            multiline=True,
+            min_lines=4,
+            max_lines=9,
+            border_color=COLORS["border"],
+            focused_border_color=COLORS["primary"],
+            bgcolor=COLORS["bg_card"],
+            text_size=12,
+            hint_text="AI auto-reply draft will appear here. You can edit directly...",
+            content_padding=12,
+        )
+
+        save_draft_btn = ft.ElevatedButton(
+            "Save as Draft",
+            icon=ft.Icons.DRAFTS_OUTLINED,
+            style=ft.ButtonStyle(
+                bgcolor=COLORS["primary"],
+                color="#FFFFFF",
+                shape=ft.RoundedRectangleBorder(radius=6),
+                padding=padding_symmetric(horizontal=12, vertical=7),
+            ),
+        )
+
+        copy_btn = ft.OutlinedButton(
+            "Copy Text",
+            icon=ft.Icons.COPY,
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=6),
+                padding=padding_symmetric(horizontal=12, vertical=7),
+                color=COLORS["text_primary"],
+            ),
+        )
+
+        tone_pill_widgets = {}
+
+        def update_tone_pills():
+            for t_key, pill in tone_pill_widgets.items():
+                is_active = (t_key == current_tone[0])
+                pill.bgcolor = COLORS["badge_bg"] if is_active else "transparent"
+                pill.border = border_all(1, COLORS["primary"] if is_active else COLORS["border"])
+                row = pill.content
+                row.controls[0].color = COLORS["primary"] if is_active else COLORS["text_muted"]
+                row.controls[1].color = COLORS["primary"] if is_active else COLORS["text_secondary"]
+                row.controls[1].weight = ft.FontWeight.BOLD if is_active else ft.FontWeight.W_500
+                safe_update(pill)
+
+        def run_generation(tone_name: str, custom_instruction: Optional[str] = None):
+            current_tone[0] = tone_name
+            if custom_instruction is not None:
+                active_prompt[0] = custom_instruction
+            update_tone_pills()
+
+            status_text.value = f"Drafting {tone_name.replace('_', '-')} reply via AI..."
+            status_text.color = COLORS["primary"]
+            safe_update(status_text)
+
+            def worker():
+                try:
+                    tone_val = ReplyTone(current_tone[0])
+                    user_name = user_profile_manager.profile.name or "Alex"
+                    reply, source = reply_generator.generate_reply_with_source(
+                        sender_name=data.get("sender_name", ""),
+                        sender_email=data.get("sender", ""),
+                        subject=data.get("subject", ""),
+                        original_body=data.get("body_plain", ""),
+                        tone=tone_val,
+                        user_name=user_name,
+                        extra_instructions=active_prompt[0] if active_prompt[0] else None,
+                    )
+                    draft_field.value = reply
+                    status_text.value = f"Draft ready \u2022 Source: {source.upper()}"
+                    status_text.color = COLORS["success"]
+                except Exception as ex:
+                    status_text.value = f"Generation note: {ex}"
+                    status_text.color = COLORS["warning"]
+                safe_update(draft_field)
+                safe_update(status_text)
+
+            threading.Thread(target=worker, daemon=True).start()
+
+        # Build tone pill controls
+        tone_controls = []
+        for key, label, icon in tones:
+            is_active = (key == current_tone[0])
+            pill = ft.Container(
+                content=ft.Row([
+                    ft.Icon(icon, size=12, color=COLORS["primary"] if is_active else COLORS["text_muted"]),
+                    ft.Text(label, size=11, weight=ft.FontWeight.BOLD if is_active else ft.FontWeight.W_500, color=COLORS["primary"] if is_active else COLORS["text_secondary"]),
+                ], spacing=4, tight=True),
+                bgcolor=COLORS["badge_bg"] if is_active else "transparent",
+                border=border_all(1, COLORS["primary"] if is_active else COLORS["border"]),
+                border_radius=100,
+                padding=padding_symmetric(horizontal=8, vertical=4),
+                ink=True,
+                on_click=lambda e, k=key: run_generation(k),
+            )
+            tone_pill_widgets[key] = pill
+            tone_controls.append(pill)
+
+        # Build prompt chip controls
+        prompt_controls = []
+        for prompt_text in prompt_presets:
+            p_chip = ft.Container(
+                content=ft.Row([
+                    ft.Icon(ft.Icons.LIGHTBULB_OUTLINE, size=11, color=COLORS["warning"]),
+                    ft.Text(prompt_text, size=10, color=COLORS["text_secondary"]),
+                ], spacing=3, tight=True),
+                bgcolor=COLORS["surface_alt"],
+                border=border_all(1, COLORS["border"]),
+                border_radius=100,
+                padding=padding_symmetric(horizontal=8, vertical=3),
+                ink=True,
+                on_click=lambda e, pt=prompt_text: run_generation(current_tone[0], pt),
+                tooltip=f"Draft with directive: {prompt_text}",
+            )
+            prompt_controls.append(p_chip)
+
+        # Actions
+        def on_copy(e):
+            text = draft_field.value or ""
+            if not text.strip():
+                return
+            try:
+                self.page_ref.set_clipboard(text)
+                copy_btn.text = "Copied!"
+                copy_btn.icon = ft.Icons.CHECK
+                copy_btn.style.color = COLORS["success"]
+                safe_update(copy_btn)
+
+                def revert():
+                    import time
+                    time.sleep(1.8)
+                    copy_btn.text = "Copy Text"
+                    copy_btn.icon = ft.Icons.COPY
+                    copy_btn.style.color = COLORS["text_primary"]
+                    safe_update(copy_btn)
+
+                threading.Thread(target=revert, daemon=True).start()
+            except Exception:
+                pass
+
+        def on_save_draft(e):
+            text = draft_field.value or ""
+            if not text.strip():
+                status_text.value = "Draft is empty. Please enter text or click a tone."
+                status_text.color = COLORS["warning"]
+                safe_update(status_text)
+                return
+
+            save_draft_btn.disabled = True
+            save_draft_btn.text = "Saving..."
+            safe_update(save_draft_btn)
+
+            def worker():
+                try:
+                    gmail_actions.create_draft(
+                        recipient=data.get("sender", ""),
+                        subject=data.get("subject", ""),
+                        body_text=text,
+                        thread_id=data.get("thread_id"),
+                        message_id=data.get("message_id"),
+                    )
+                    status_text.value = "Draft successfully created in Gmail! (Audit logged)"
+                    status_text.color = COLORS["success"]
+                    try:
+                        self.page_ref.show_dialog(
+                            ft.SnackBar(ft.Text("Draft saved to Gmail!"), bgcolor=COLORS["success"])
+                        )
+                    except Exception:
+                        pass
+                except Exception as ex:
+                    status_text.value = f"Failed to save draft: {ex}"
+                    status_text.color = COLORS["danger"]
+                finally:
+                    save_draft_btn.disabled = False
+                    save_draft_btn.text = "Save as Draft"
+                    safe_update(save_draft_btn)
+                    safe_update(status_text)
+
+            threading.Thread(target=worker, daemon=True).start()
+
+        copy_btn.on_click = on_copy
+        save_draft_btn.on_click = on_save_draft
+
+        # Automatically kick off initial generation so the draft is ready
+        run_generation(current_tone[0])
+
+        return ft.Container(
+            content=ft.Column([
+                # Header
+                ft.Row([
+                    ft.Container(
+                        content=ft.Icon(ft.Icons.AUTO_AWESOME, size=14, color="#FFFFFF"),
+                        bgcolor=COLORS["primary"],
+                        padding=5,
+                        border_radius=6,
+                    ),
+                    ft.Column([
+                        ft.Text("Quick AI Auto-Reply Assistant", size=13, weight=ft.FontWeight.BOLD, color=COLORS["text_primary"]),
+                        status_text,
+                    ], spacing=2, expand=True),
+                    ft.TextButton(
+                        "Full Modal",
+                        icon=ft.Icons.OPEN_IN_NEW,
+                        icon_color=COLORS["primary"],
+                        style=ft.ButtonStyle(color=COLORS["primary"]),
+                        on_click=lambda e: self._open_reply_dialog(data),
+                        tooltip="Open full dialog with direct sending and audit review",
+                    ),
+                ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
+
+                ft.Divider(height=1, color=COLORS["border"]),
+
+                # Tones
+                ft.Row([
+                    ft.Text("Tone:", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_muted"]),
+                    ft.Row(tone_controls, spacing=6, wrap=True, expand=True),
+                ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=6),
+
+                # Prompt suggestions
+                ft.Row([
+                    ft.Text("Prompts:", size=11, weight=ft.FontWeight.BOLD, color=COLORS["text_muted"]),
+                    ft.Row(prompt_controls, spacing=6, wrap=True, expand=True),
+                ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=6),
+
+                # Draft text area
+                draft_field,
+
+                # Bottom actions row
+                ft.Row([
+                    save_draft_btn,
+                    copy_btn,
+                    ft.IconButton(
+                        icon=ft.Icons.REFRESH,
+                        icon_size=18,
+                        icon_color=COLORS["text_secondary"],
+                        tooltip="Regenerate Draft",
+                        on_click=lambda e: run_generation(current_tone[0]),
+                    ),
+                    ft.Container(expand=True),
+                    ft.Text("1-click safe draft \u2022 Human approval required before send", size=10, color=COLORS["text_muted"]),
+                ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
+            ], spacing=10),
+            bgcolor=COLORS["surface_alt"],
+            border=border_only(
+                left=ft.BorderSide(3, COLORS["primary"]),
+                top=ft.BorderSide(1, COLORS["border"]),
+                right=ft.BorderSide(1, COLORS["border"]),
+                bottom=ft.BorderSide(1, COLORS["border"]),
+            ),
+            border_radius=8,
+            padding=14,
+            margin=padding_symmetric(horizontal=16, vertical=6),
+        )
 
     def _copy_to_clipboard(self, text: str) -> None:
         try:
             self.page_ref.set_clipboard(text)
-            self.page_ref.open(ft.SnackBar(ft.Text("Email body copied to clipboard!"), bgcolor=COLORS["success"]))
+            self.page_ref.show_dialog(ft.SnackBar(ft.Text("Email body copied to clipboard!"), bgcolor=COLORS["success"]))
         except Exception:
             pass
 
     def _open_reply_dialog(self, email_data: Dict[str, Any]) -> None:
         dialog = ReplyDialog(page=self.page_ref, email_data=email_data)
         try:
-            self.page_ref.open(dialog)
+            self.page_ref.show_dialog(dialog)
         except Exception:
             pass
 
@@ -1014,11 +1339,11 @@ class InboxIntelligenceView(ft.Container):
                 user_approved=True,
             )
             event_bus.publish(EVT_SUGGESTION_ACTIONED, 1)
-            self.page_ref.open(ft.SnackBar(ft.Text("Email archived"), bgcolor=COLORS["success"]))
+            self.page_ref.show_dialog(ft.SnackBar(ft.Text("Email archived"), bgcolor=COLORS["success"]))
             self.load_emails()
         except Exception as e:
             try:
-                self.page_ref.open(ft.SnackBar(ft.Text(f"Archive: {e}"), bgcolor=COLORS["warning"]))
+                self.page_ref.show_dialog(ft.SnackBar(ft.Text(f"Archive: {e}"), bgcolor=COLORS["warning"]))
             except Exception:
                 pass
 
@@ -1034,10 +1359,10 @@ class InboxIntelligenceView(ft.Container):
         )
 
         def cancel(e):
-            self.page_ref.close(dialog)
+            self.page_ref.pop_dialog()
 
         def confirm(e):
-            self.page_ref.close(dialog)
+            self.page_ref.pop_dialog()
             self._execute_trash(email_data)
 
         dialog.actions = [
@@ -1050,7 +1375,7 @@ class InboxIntelligenceView(ft.Container):
                 on_click=confirm,
             ),
         ]
-        self.page_ref.open(dialog)
+        self.page_ref.show_dialog(dialog)
 
     def _execute_trash(self, email_data: Dict[str, Any]) -> None:
         try:
@@ -1063,14 +1388,14 @@ class InboxIntelligenceView(ft.Container):
                 double_confirmed=True,
             )
             event_bus.publish(EVT_SUGGESTION_ACTIONED, 1)
-            self.page_ref.open(ft.SnackBar(ft.Text("Email moved to trash"), bgcolor=COLORS["danger"]))
+            self.page_ref.show_dialog(ft.SnackBar(ft.Text("Email moved to trash"), bgcolor=COLORS["danger"]))
             self.load_emails()
         except Exception as e:
             self._show_action_error("Move to trash", e)
 
     def _show_action_error(self, action: str, error: Exception) -> None:
         try:
-            self.page_ref.open(
+            self.page_ref.show_dialog(
                 ft.SnackBar(ft.Text(f"{action} failed: {error}"), bgcolor=COLORS["danger"])
             )
         except Exception:

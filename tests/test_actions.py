@@ -159,3 +159,37 @@ def test_create_draft_builds_threaded_reply_message(actions_demo):
     assert message["Subject"] == "Re: Project timeline"
     assert "I will send it Thursday" in message.get_payload(decode=True).decode("utf-8")
     log_action.assert_called_once()
+
+
+def test_send_reply_rejects_without_approval(actions_demo):
+    with pytest.raises(SafetyViolationError, match="explicit user approval"):
+        actions_demo.send_reply(
+            recipient="person@example.com",
+            subject="Hello",
+            body_text="Hi there",
+            user_approved=False,
+        )
+
+
+def test_send_reply_executes_successfully(actions_demo):
+    service = MagicMock()
+    send = service.users.return_value.messages.return_value.send
+    send.return_value = MagicMock()
+
+    with (
+        patch.object(actions_demo, "_get_service", return_value=service),
+        patch("gmail.actions.GmailClientFactory.execute_with_retry", return_value={"id": "sent-1"}),
+        patch("gmail.actions.repository.log_action") as log_action,
+    ):
+        result = actions_demo.send_reply(
+            recipient="client@company.com",
+            subject="Proposal review",
+            body_text="Here are the revised terms.",
+            thread_id="thread-999",
+            user_approved=True,
+        )
+
+    assert result == {"id": "sent-1"}
+    send_body = send.call_args.kwargs["body"]
+    assert send_body["threadId"] == "thread-999"
+    log_action.assert_called_once()
